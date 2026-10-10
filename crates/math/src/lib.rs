@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod edit;
+mod latex;
 mod linear;
 mod omml;
 mod templates;
@@ -13,6 +14,7 @@ mod xml;
 pub(crate) use xml::XML_DEPTH;
 
 pub use edit::{Caret, Editor, Key, Path, children, children_mut, seq_at, seq_at_mut, units};
+pub use latex::to_latex;
 pub use linear::{from_linear, to_linear, unknown_commands};
 pub use omml::{OMATH_BREAK, OMML_NS, from_omml, to_omml};
 pub use templates::{Template, template, templates};

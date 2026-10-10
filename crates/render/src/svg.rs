@@ -5,7 +5,7 @@
 use std::fmt::Write as _;
 
 use equashion_layout::{MathFonts, Prim, Rgb, Scene};
-use vello_cpu::kurbo::{BezPath, PathEl};
+use kurbo::{BezPath, PathEl};
 
 use crate::{SYNTH_BOLD_STROKE, glyph_transform};
 

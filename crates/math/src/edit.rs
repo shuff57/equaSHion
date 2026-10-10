@@ -541,6 +541,29 @@ impl Editor {
         *self = Editor::new(m);
     }
 
+    /// The equation as LaTeX (see [`crate::to_latex`]).
+    pub fn latex(&self) -> String {
+        crate::to_latex(&self.math)
+    }
+
+    /// Replace the whole equation from typed text or LaTeX. Like [`Editor::set_math`] the caret
+    /// goes to the end and the history starts over, so a host can load a value without leaving
+    /// an undo step behind.
+    pub fn set_latex(&mut self, src: &str) {
+        self.set_math(crate::from_linear(src));
+    }
+
+    /// True when the caret is at the very start of the equation (no enclosing slot, position 0).
+    /// A host uses this to hand an Up or Left key to the next field.
+    pub fn at_start(&self) -> bool {
+        self.caret.path.is_empty() && self.caret.pos == 0
+    }
+
+    /// True when the caret is at the very end of the top-level equation.
+    pub fn at_end(&self) -> bool {
+        self.caret.path.is_empty() && self.caret.pos >= units(&self.math.body)
+    }
+
     /// True when nothing has been typed.
     pub fn is_blank(&self) -> bool {
         units(&self.math.body) == 0

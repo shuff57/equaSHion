@@ -13,7 +13,7 @@
 use crate::xml::{self, XEl};
 use crate::{MAX_DEPTH, Math, Node, Seq, Style};
 
-const GREEK: &[(&str, char)] = &[
+pub(crate) const GREEK: &[(&str, char)] = &[
     ("alpha", 'α'),
     ("beta", 'β'),
     ("gamma", 'γ'),
@@ -55,7 +55,7 @@ const GREEK: &[(&str, char)] = &[
     ("Omega", 'Ω'),
 ];
 
-const FUNCS: &[&str] = &[
+pub(crate) const FUNCS: &[&str] = &[
     "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "log", "ln", "exp", "lim", "max", "min", "det",
     "gcd",
 ];
@@ -64,7 +64,7 @@ const FUNCS: &[&str] = &[
 const BARE_FUNCS: &[&str] = &["sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "log", "ln", "exp"];
 
 /// LaTeX-style symbol names.
-const SYMS: &[(&str, &str)] = &[
+pub(crate) const SYMS: &[(&str, &str)] = &[
     ("leq", "≤"),
     ("le", "≤"),
     ("geq", "≥"),
@@ -118,7 +118,7 @@ const SYMS: &[(&str, &str)] = &[
     ("rceil", "⌉"),
 ];
 
-const ACCENTS: &[(&str, char)] = &[
+pub(crate) const ACCENTS: &[(&str, char)] = &[
     ("hat", '\u{0302}'),
     ("tilde", '\u{0303}'),
     ("bar", '\u{0305}'),
@@ -132,7 +132,7 @@ const ACCENTS: &[(&str, char)] = &[
 ];
 
 /// Operator names that LaTeX spells as commands and that print as plain words.
-const PASS: &[&str] = &["mod", "bmod", "pmod", "arg", "dim", "ker", "deg", "hom", "Pr", "lg", "sgn", "limsup", "liminf", "sup"];
+pub(crate) const PASS: &[&str] = &["mod", "bmod", "pmod", "arg", "dim", "ker", "deg", "hom", "Pr", "lg", "sgn", "limsup", "liminf", "sup"];
 
 /// Double-struck capital for the common number sets; everything else is left alone.
 fn double_struck(c: char) -> char {
@@ -148,7 +148,7 @@ fn double_struck(c: char) -> char {
     }
 }
 
-const NARY: &[(&str, char)] =
+pub(crate) const NARY: &[(&str, char)] =
     &[("sum", '∑'), ("prod", '∏'), ("int", '∫'), ("iint", '∬'), ("iiint", '∭'), ("oint", '∮'), ("bigcup", '⋃'), ("bigcap", '⋂')];
 
 /// The single character a LaTeX-style symbol or Greek name stands for (`alpha`, `leq`), if any.
@@ -654,6 +654,24 @@ impl Parser {
             }
             "limits" | "nolimits" => {}
             "left" | "right" | "big" | "Big" | "bigl" | "bigr" | "Bigl" | "Bigr" | "displaystyle" => {}
+            "abs"
+                if {
+                    self.skip_ws();
+                    self.peek() == Some('{')
+                } =>
+            {
+                let body = self.brace_arg();
+                out.push(Node::Delim { open: "|".into(), close: "|".into(), sep: "|".into(), items: vec![body] });
+            }
+            // An empty slot (`\placeholder{}`) is nothing; a filled one is its content.
+            "placeholder" => {
+                self.skip_ws();
+                if self.peek() == Some('{') {
+                    for n in self.brace_arg() {
+                        push_node(out, n);
+                    }
+                }
+            }
             _ if NARY.iter().any(|(n, _)| *n == w) && self.depth < MAX_DEPTH => {
                 let op = NARY.iter().find(|(n, _)| *n == w).map(|(_, o)| *o).unwrap_or('∑');
                 self.depth += 1;
@@ -926,6 +944,10 @@ impl Parser {
         match w {
             "sqrt" => return Some(self.radical()),
             "inf" | "infty" => return Some(Node::Text("∞".into())),
+            // MathLive's upright constants and differential: a typed `d`, an upright `e` and `i`.
+            "differentialD" => return Some(Node::Text("d".into())),
+            "exponentialE" => return Some(Node::Styled { text: "e".into(), style: Style::Plain }),
+            "imaginaryI" => return Some(Node::Styled { text: "i".into(), style: Style::Plain }),
             "times" => return Some(Node::Text("×".into())),
             _ => {}
         }
@@ -936,6 +958,19 @@ impl Parser {
             self.pos += 1;
             let lim = self.atom(false);
             return Some(Node::Limit { lower: true, base: vec![Node::Styled { text: w.to_string(), style: Style::Plain }], lim });
+        }
+        if FUNCS.contains(&w) {
+            // `\sin\left(2x\right)`: the sizing command is dropped, so the group is the argument.
+            let save = self.pos;
+            self.skip_ws();
+            if !self.skip_sizer() {
+                self.pos = save;
+            }
+        }
+        if FUNCS.contains(&w) && self.peek() == Some('{') && self.depth < MAX_DEPTH {
+            // `\sin{x}`: a braced argument is the function's argument.
+            let body = self.brace_arg();
+            return Some(Node::Func { name: w.to_string(), body });
         }
         if self.peek() == Some('(') && self.depth < MAX_DEPTH {
             if FUNCS.contains(&w) {
@@ -1031,6 +1066,24 @@ impl Parser {
             self.pos = save;
         }
         None
+    }
+
+    /// At `\left`, `\bigl`, ... directly before `(`: step over the command. True when it did.
+    fn skip_sizer(&mut self) -> bool {
+        if self.peek() != Some('\\') {
+            return false;
+        }
+        let mut j = self.pos + 1;
+        let mut w = String::new();
+        while let Some(c) = self.c.get(j).filter(|c| c.is_ascii_alphabetic()) {
+            w.push(*c);
+            j += 1;
+        }
+        if matches!(w.as_str(), "left" | "big" | "Big" | "bigl" | "Bigl" | "biggl" | "Biggl") && self.c.get(j) == Some(&'(') {
+            self.pos = j;
+            return true;
+        }
+        false
     }
 
     fn radical(&mut self) -> Node {
@@ -1526,7 +1579,7 @@ fn starts_alnum(n: Option<&Node>, depth: usize) -> bool {
 }
 
 /// Visible text inside an unknown element, so a `Raw` node still reads as something.
-fn raw_text(src: &str) -> String {
+pub(crate) fn raw_text(src: &str) -> String {
     fn walk(e: &XEl, out: &mut String, d: usize) {
         if d > MAX_DEPTH + 16 {
             return;

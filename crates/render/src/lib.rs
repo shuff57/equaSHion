@@ -1,5 +1,8 @@
 //! equaSHion rendering: a laid-out [`Scene`] to premultiplied RGBA pixels ([`render_scene`],
-//! with vello_cpu) or to an SVG document ([`scene_to_svg`]).
+//! with vello_cpu, behind the default `raster` feature) or to an SVG document ([`scene_to_svg`]).
+//!
+//! Without `raster` only the SVG path is built and `vello_cpu` is not a dependency, which is
+//! what a browser UI that draws equations as SVG wants.
 //!
 //! The raster path is WordCraft's `render_eq` and the `Draw::Glyphs` / `Draw::Fill` /
 //! `Draw::Path` branches of its display-list renderer, including synthetic bold (the outline
@@ -21,14 +24,19 @@
 
 mod svg;
 
+use kurbo::Affine;
+
+#[cfg(feature = "raster")]
 use equashion_layout::{EqLayout, MathFonts, Prim, Rgb, Scene};
-use vello_cpu::kurbo::{self, Affine};
+#[cfg(feature = "raster")]
 use vello_cpu::peniko;
+#[cfg(feature = "raster")]
 use vello_cpu::{RenderContext, Resources};
 
 pub use svg::{fmt2, scene_to_svg};
 
 /// Largest raster side vello_cpu handles comfortably.
+#[cfg(feature = "raster")]
 pub const MAX_SIDE: u32 = 16_000;
 
 /// Horizontal shear of synthetic italic (WordCraft's value).
@@ -38,6 +46,7 @@ pub const SYNTH_ITALIC_SKEW: f64 = -0.21;
 pub const SYNTH_BOLD_STROKE: f64 = 0.03;
 
 /// A rendered image (premultiplied RGBA8, row-major).
+#[cfg(feature = "raster")]
 #[derive(Clone, Default)]
 pub struct Rendered {
     pub width: u32,
@@ -45,6 +54,7 @@ pub struct Rendered {
     pub pixels: Vec<u8>,
 }
 
+#[cfg(feature = "raster")]
 impl Rendered {
     /// The pixels with alpha un-premultiplied (straight RGBA8).
     pub fn to_straight(&self) -> Vec<u8> {
@@ -75,6 +85,7 @@ impl Rendered {
     }
 }
 
+#[cfg(feature = "raster")]
 fn color(c: Rgb) -> peniko::Color {
     peniko::Color::from_rgba8(c.0, c.1, c.2, 255)
 }
@@ -88,6 +99,7 @@ pub fn glyph_transform(x: f64, y: f64, size: f64, upem: f64, synth_italic: bool)
 }
 
 /// Render `scene` at `scale` pixels per point, on `background` (transparent when `None`).
+#[cfg(feature = "raster")]
 pub fn render_scene(scene: &Scene, fonts: &dyn MathFonts, scale: f64, background: Option<Rgb>) -> Rendered {
     let scale = if scale.is_finite() { scale.clamp(0.1, 16.0) } else { 1.0 };
     let side = |v: f64| if v.is_finite() { (v * scale).ceil().clamp(1.0, MAX_SIDE as f64) as u16 } else { 1 };
@@ -113,14 +125,17 @@ pub fn render_scene(scene: &Scene, fonts: &dyn MathFonts, scale: f64, background
 
 /// Render an equation laid out by [`equashion_layout::layout_equation`] on white (the equation
 /// editor's canvas); `scale` is pixels per point.
+#[cfg(feature = "raster")]
 pub fn render_eq(l: &EqLayout, fonts: &dyn MathFonts, scale: f64) -> Rendered {
     render_scene(&l.scene, fonts, scale, Some(Rgb::WHITE))
 }
 
+#[cfg(feature = "raster")]
 fn finite(r: &kurbo::Rect) -> bool {
     r.x0.is_finite() && r.y0.is_finite() && r.x1.is_finite() && r.y1.is_finite()
 }
 
+#[cfg(feature = "raster")]
 fn draw(ctx: &mut RenderContext, fonts: &dyn MathFonts, p: &Prim, view: Affine) {
     match p {
         Prim::Rule(r, c) => {

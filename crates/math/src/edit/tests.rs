@@ -879,3 +879,23 @@ fn typed_angle_floor_and_ceiling_commands_become_brackets() {
     e.type_str(r"\langle u,v\rangle+\lfloor x\rfloor+\lceil y\rceil");
     assert_eq!(crate::to_linear(e.math()).replace(' ', ""), "⟨u,v⟩+⌊x⌋+⌈y⌉");
 }
+
+#[test]
+fn latex_round_trips_through_the_editor() {
+    let mut e = Editor::new(Math::default());
+    e.set_latex(r"\frac{a}{b}+\sqrt{x}");
+    assert_eq!(e.latex(), r"\frac{a}{b}+\sqrt{x}");
+    assert!(!e.undo(), "loading a value leaves no undo step");
+}
+
+#[test]
+fn caret_edge_queries() {
+    let mut e = Editor::new(crate::from_linear("x+1"));
+    assert!(e.at_end() && !e.at_start());
+    e.key(Key::Home, false);
+    assert!(e.at_start() && !e.at_end());
+    let mut f = Editor::new(crate::from_linear(r"\frac{a}{b}"));
+    f.key(Key::Home, false);
+    f.key(Key::Right, false);
+    assert!(!f.at_start() && !f.at_end(), "inside the numerator is neither edge");
+}
