@@ -4,13 +4,18 @@
 //! | Kind | MIME types written | Content |
 //! |---|---|---|
 //! | `latex` | `text/plain` | [`to_latex`] |
-//! | `word` | `text/plain`, `text/html` | OMML (`m:oMath` with its namespace); an HTML fragment that carries the same OMML the way Word's own clipboard HTML does, with a PNG `<img>` for programs that do not read it |
+//! | `mathml` (alias `word`) | `text/plain`, `text/html` | MathML: the `<math xmlns=".." display="block">` element as text, and the same element in an HTML fragment (`<!--StartFragment-->`) with nothing else in it |
+//! | `omml` | `text/plain` | OMML: `m:oMathPara` / `m:oMath` with its namespace ([`to_omml`]) |
 //! | `text` | `text/plain` | [`to_linear`] |
 //! | `image` | `image/png` | black ink on white, 2 pixels per point, 144 dpi |
 //! | `svg` | `image/svg+xml` (a download, not the clipboard) | `equashion-render`'s SVG backend, black ink |
+//!
+//! Where the MathML was checked (see the README): pasted into ONLYOFFICE Desktop Editors 9.4
+//! (it reads the `text/html` copy and makes an equation; the `text/plain` copy alone stays text),
+//! and opened as a `.mml` file in LibreOffice 26.2 Math.
 
 use equashion_layout::{DEFAULT_FAMILY, FontDb, Rgb, layout_equation};
-use equashion_math::{Math, from_linear, from_omml, to_latex, to_linear, to_omml, unknown_commands};
+use equashion_math::{Math, from_linear, from_mathml, from_omml, to_latex, to_linear, to_mathml_display, to_omml, unknown_commands};
 
 /// Equation size of the image and SVG exports, points.
 pub const EXPORT_PT: f64 = 20.0;
@@ -25,29 +30,39 @@ pub const MAX_IMPORT: usize = 20_000;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CopyKind {
     Latex,
-    Word,
-    Text,
+    MathMl,
     Image,
+    Omml,
+    Text,
     Svg,
 }
 
 impl CopyKind {
-    pub const ALL: [CopyKind; 5] = [CopyKind::Latex, CopyKind::Word, CopyKind::Text, CopyKind::Image, CopyKind::Svg];
+    /// Every kind, in button order: the main row, then the "More" row.
+    pub const ALL: [CopyKind; 6] = [CopyKind::Latex, CopyKind::MathMl, CopyKind::Image, CopyKind::Omml, CopyKind::Text, CopyKind::Svg];
+    /// The buttons always shown.
+    pub const MAIN: [CopyKind; 3] = [CopyKind::Latex, CopyKind::MathMl, CopyKind::Image];
+    /// The buttons behind "More".
+    pub const MORE: [CopyKind; 3] = [CopyKind::Omml, CopyKind::Text, CopyKind::Svg];
 
     /// The name the `copy(kind)` hook takes.
     pub fn name(self) -> &'static str {
         match self {
             CopyKind::Latex => "latex",
-            CopyKind::Word => "word",
-            CopyKind::Text => "text",
+            CopyKind::MathMl => "mathml",
             CopyKind::Image => "image",
+            CopyKind::Omml => "omml",
+            CopyKind::Text => "text",
             CopyKind::Svg => "svg",
         }
     }
 
-    /// A kind by name (any case).
+    /// A kind by name (any case). `word` is the old name of `mathml`.
     pub fn parse(name: &str) -> Option<CopyKind> {
         let n = name.trim().to_ascii_lowercase();
+        if n == "word" {
+            return Some(CopyKind::MathMl);
+        }
         CopyKind::ALL.into_iter().find(|k| k.name() == n)
     }
 
@@ -55,9 +70,10 @@ impl CopyKind {
     pub fn title(self) -> &'static str {
         match self {
             CopyKind::Latex => "Copy LaTeX",
-            CopyKind::Word => "Copy for Word",
-            CopyKind::Text => "Copy text",
+            CopyKind::MathMl => "Copy MathML",
             CopyKind::Image => "Copy image",
+            CopyKind::Omml => "Copy OMML",
+            CopyKind::Text => "Copy text",
             CopyKind::Svg => "Download SVG",
         }
     }
@@ -65,12 +81,18 @@ impl CopyKind {
     /// The button tooltip: what it puts where.
     pub fn hint(self) -> &'static str {
         match self {
-            CopyKind::Latex => "LaTeX source, for Overleaf, Markdown, Anki or any LaTeX editor",
-            CopyKind::Word => "An Office Math equation (OMML) for Word, PowerPoint and Outlook on the desktop",
-            CopyKind::Text => "Plain linear text such as a/b and x^2",
+            CopyKind::Latex => "LaTeX source, for Overleaf, Markdown with math, Anki or any LaTeX editor",
+            CopyKind::MathMl => "A MathML equation. ONLYOFFICE pastes it as an equation; for Word, see the line below",
             CopyKind::Image => "A PNG picture of the equation, black on white",
+            CopyKind::Omml => "Office Math XML (an m:oMath element), for programs and code that read OMML",
+            CopyKind::Text => "Plain linear text such as a/b and x^2",
             CopyKind::Svg => "Save the equation as an SVG file, black ink",
         }
+    }
+
+    /// True for the kinds behind "More".
+    pub fn is_more(self) -> bool {
+        CopyKind::MORE.contains(&self)
     }
 
     /// True when the action saves a file instead of using the clipboard.
@@ -132,12 +154,12 @@ pub fn payload(kind: CopyKind, m: &Math, fonts: &FontDb) -> Payload {
     let (items, filename) = match kind {
         CopyKind::Latex => (text(to_latex(m)), None),
         CopyKind::Text => (text(to_linear(m)), None),
-        CopyKind::Word => {
-            let omml = to_omml(m);
-            let png = png_bytes(m, fonts);
-            let html = word_html(&omml, &to_linear(m), &png);
-            (vec![("text/plain", Data::Text(omml)), ("text/html", Data::Text(html))], None)
+        CopyKind::MathMl => {
+            let mathml = to_mathml_display(m, true);
+            let html = mathml_html(&mathml);
+            (vec![("text/plain", Data::Text(mathml)), ("text/html", Data::Text(html))], None)
         }
+        CopyKind::Omml => (text(to_omml(m)), None),
         CopyKind::Image => (vec![("image/png", Data::Bytes(png_bytes(m, fonts)))], None),
         CopyKind::Svg => (vec![("image/svg+xml", Data::Text(svg(m, fonts)))], Some("equation.svg")),
     };
@@ -176,52 +198,40 @@ pub fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Standard base64 (for the `<img>` data URL).
-pub fn base64(bytes: &[u8]) -> String {
-    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for c in bytes.chunks(3) {
-        let b = [c.first().copied().unwrap_or(0), c.get(1).copied().unwrap_or(0), c.get(2).copied().unwrap_or(0)];
-        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-        for (i, shift) in [18u32, 12, 6, 0].into_iter().enumerate() {
-            if i <= c.len() {
-                out.push(char::from(T[((n >> shift) & 63) as usize]));
-            } else {
-                out.push('=');
-            }
-        }
-    }
-    out
-}
-
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
-}
-
-/// The HTML half of "Copy for Word": the OMML inside the `[if gte msEquation 12]` conditional
-/// comment Word writes around equations in its own clipboard HTML, and a PNG `<img>` in the
-/// branch every other program reads. Not verified against a real Word install.
-pub fn word_html(omml: &str, alt: &str, png: &[u8]) -> String {
-    let img =
-        if png.is_empty() { html_escape(alt) } else { format!("<img alt=\"{}\" src=\"data:image/png;base64,{}\">", html_escape(alt), base64(png)) };
-    format!(
-        "<html xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" xmlns:m=\"{ns}\" xmlns=\"http://www.w3.org/TR/REC-html40\"><body><!--StartFragment--><!--[if gte msEquation 12]>{omml}<![endif]--><![if !msEquation]>{img}<![endif]><!--EndFragment--></body></html>",
-        ns = equashion_math::OMML_NS,
-    )
+/// The HTML half of "Copy MathML": the `<math>` element alone in a clipboard fragment. No image
+/// or other markup, so a program that understands MathML in HTML (ONLYOFFICE) has nothing else
+/// to prefer.
+pub fn mathml_html(mathml: &str) -> String {
+    format!("<html><body><!--StartFragment-->{mathml}<!--EndFragment--></body></html>")
 }
 
 /// What a pasted or imported text was read as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
+    MathMl,
     Omml,
     Latex,
     Linear,
 }
 
-/// Tell OMML (`<m:oMath` / `<oMath` XML), LaTeX (has a backslash) and linear text apart.
+/// True when `t` holds a MathML `<math>` start tag, with or without a prefix (`<mml:math`).
+fn has_math_tag(t: &str) -> bool {
+    t.match_indices('<').any(|(i, _)| {
+        let rest = &t[i + 1..];
+        let name_len = rest.find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, ':' | '_' | '-' | '.'))).unwrap_or(rest.len());
+        let name = &rest[..name_len];
+        let after = rest[name_len..].chars().next();
+        name.rsplit(':').next() == Some("math") && after.is_none_or(|c| c.is_whitespace() || c == '>' || c == '/')
+    })
+}
+
+/// Tell MathML (a `<math>` element), OMML (`<m:oMath` / `<oMath` XML), LaTeX (has a backslash)
+/// and linear text apart.
 pub fn detect(text: &str) -> Format {
     let t = text.trim_start();
-    if t.starts_with('<') && (t.contains("<m:oMath") || t.contains("<oMath")) {
+    if t.starts_with('<') && has_math_tag(t) {
+        Format::MathMl
+    } else if t.starts_with('<') && (t.contains("<m:oMath") || t.contains("<oMath")) {
         Format::Omml
     } else if t.contains('\\') || t.starts_with('$') {
         Format::Latex
@@ -259,20 +269,23 @@ pub enum ImportError {
     TooLong,
     /// OMML that gave no equation.
     NoEquation,
+    /// MathML that gave no equation.
+    NoMathMl,
 }
 
 impl ImportError {
     pub fn message(self) -> &'static str {
         match self {
-            ImportError::Empty => "Nothing to load. Paste LaTeX, OMML or plain text first.",
+            ImportError::Empty => "Nothing to load. Paste LaTeX, MathML, OMML or plain text first.",
             ImportError::TooLong => "That text is too long to load (over 20000 characters).",
             ImportError::NoEquation => "No equation could be read from that OMML. Check that the m:oMath element is complete.",
+            ImportError::NoMathMl => "No equation could be read from that MathML. Check that the math element is complete.",
         }
     }
 }
 
-/// Read `text` as OMML, LaTeX or linear text. Never panics; hostile input gives an error or
-/// what could be read.
+/// Read `text` as MathML, OMML, LaTeX or linear text. Never panics; hostile input gives an
+/// error or what could be read.
 pub fn import(text: &str) -> Result<Imported, ImportError> {
     if text.trim().is_empty() {
         return Err(ImportError::Empty);
@@ -282,6 +295,10 @@ pub fn import(text: &str) -> Result<Imported, ImportError> {
     }
     let format = detect(text);
     let math = match format {
+        Format::MathMl => match from_mathml(text) {
+            Ok(m) if has_text(&m.body) => m,
+            _ => return Err(ImportError::NoMathMl),
+        },
         Format::Omml => {
             let m = from_omml(text);
             if !has_text(&m.body) {
@@ -354,11 +371,17 @@ mod tests {
         let m = from_linear(r"\frac{a}{b}");
         let latex = payload(CopyKind::Latex, &m, &f);
         assert_eq!(latex.fallback_text(), Some(r"\frac{a}{b}"));
-        let word = payload(CopyKind::Word, &m, &f);
-        let omml = word.fallback_text().unwrap_or_default();
-        assert!(omml.starts_with("<m:oMath xmlns:m=") && omml.contains("<m:f>"), "{omml}");
-        let html = word.get("text/html").and_then(Data::as_text).unwrap_or_default();
-        assert!(html.contains("msEquation") && html.contains("<m:f>") && html.contains("data:image/png;base64,iVBORw0KGgo"), "{html}");
+        let mathml = payload(CopyKind::MathMl, &m, &f);
+        let x = mathml.fallback_text().unwrap_or_default();
+        assert_eq!(x, "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><mfrac><mi>a</mi><mi>b</mi></mfrac></math>");
+        let html = mathml.get("text/html").and_then(Data::as_text).unwrap_or_default();
+        assert_eq!(html, format!("<html><body><!--StartFragment-->{x}<!--EndFragment--></body></html>"));
+        assert!(!html.contains("<img") && !html.contains("msEquation"));
+        assert_eq!(payload(CopyKind::parse("word").unwrap_or(CopyKind::Latex), &m, &f), mathml);
+        let omml = payload(CopyKind::Omml, &m, &f);
+        assert_eq!(omml.items.len(), 1);
+        let o = omml.fallback_text().unwrap_or_default();
+        assert!(o.starts_with("<m:oMath xmlns:m=") && o.contains("<m:f>"), "{o}");
         assert_eq!(payload(CopyKind::Text, &m, &f).fallback_text(), Some("a/b"));
         let png = payload(CopyKind::Image, &m, &f);
         let Some(Data::Bytes(b)) = png.get("image/png") else { panic!("no png") };
@@ -370,17 +393,12 @@ mod tests {
     }
 
     #[test]
-    fn base64_matches_known_vectors() {
-        assert_eq!(base64(b""), "");
-        assert_eq!(base64(b"f"), "Zg==");
-        assert_eq!(base64(b"fo"), "Zm8=");
-        assert_eq!(base64(b"foo"), "Zm9v");
-        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
-    }
-
-    #[test]
     fn detect_and_import() {
         assert_eq!(detect("<m:oMath><m:r><m:t>x</m:t></m:r></m:oMath>"), Format::Omml);
+        assert_eq!(detect("<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><mi>x</mi></math>"), Format::MathMl);
+        assert_eq!(detect("<mml:math><mml:mi>x</mml:mi></mml:math>"), Format::MathMl);
+        assert_eq!(detect("<html><body><!--StartFragment--><math><mi>x</mi></math>"), Format::MathMl);
+        assert_eq!(detect("<mathx>"), Format::Linear);
         assert_eq!(detect("  <oMath><r><t>x</t></r></oMath>"), Format::Omml);
         assert_eq!(detect(r"\frac{a}{b}"), Format::Latex);
         assert_eq!(detect("$x^2$"), Format::Latex);
@@ -401,6 +419,10 @@ mod tests {
         assert_eq!(import("<m:oMath"), Err(ImportError::NoEquation));
         assert_eq!(import("<m:oMath><m:f>"), Err(ImportError::NoEquation));
         assert!(import("<m:oMath><m:f><m:num><m:r><m:t>1").is_ok());
+        let i = import("<math display=\"block\"><msqrt><mi>x</mi></msqrt></math>").unwrap_or_else(|e| panic!("{e:?}"));
+        assert_eq!((i.format, to_latex(&i.math).as_str(), i.math.para), (Format::MathMl, r"\sqrt{x}", true));
+        assert_eq!(import("<math></math>"), Err(ImportError::NoMathMl));
+        assert_eq!(import("<math><mrow>"), Err(ImportError::NoMathMl));
     }
 
     #[test]
@@ -418,12 +440,14 @@ mod tests {
             "x".repeat(MAX_IMPORT + 1),
             "^_^_^_/ / / sqrt sqrt \\begin{matrix}&&&\\\\\\end{cases}".to_string(),
             "\u{202E}\u{FEFF}\u{1F600}".to_string(),
+            format!("<math>{}", "<mfrac><mrow>".repeat(4000)),
+            "<math><mi>&bogus;</mi><mfenced separators=''/><mmultiscripts><mprescripts/></mmultiscripts></math>".to_string(),
         ];
         let f = fonts();
         for c in &cases {
             if let Ok(i) = import(c) {
                 // Small enough to export: the payloads must not panic either.
-                for k in [CopyKind::Latex, CopyKind::Word, CopyKind::Text] {
+                for k in [CopyKind::Latex, CopyKind::MathMl, CopyKind::Omml, CopyKind::Text] {
                     let _ = payload(k, &i.math, &f);
                 }
             }

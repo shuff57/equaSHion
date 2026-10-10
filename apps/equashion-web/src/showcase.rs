@@ -50,9 +50,16 @@ pub const HOW_TO_TYPE: &[(&str, &str)] = &[
     ("Backspace", "Delete to the left."),
     ("Ctrl+Z, Ctrl+Y", "Undo and redo (Cmd on a Mac)."),
     ("Esc twice", "Go back to the equation last loaded."),
-    ("Ctrl+V", "Paste LaTeX, OMML or plain text at the caret."),
+    ("Ctrl+V", "Paste LaTeX, MathML, OMML or plain text at the caret."),
     ("Palette", "Matrices, cases, brackets and accents."),
 ];
+
+/// The line under the Copy row: where each format pastes. Only what was checked is claimed (see
+/// the README); Word is named with the paste route to try, not as verified.
+pub const COPY_GUIDE: &str = "LaTeX goes into Overleaf or Markdown math, MathML pastes as an equation in ONLYOFFICE (in Word, try Paste Special > Unformatted Text), and the image pastes anywhere.";
+
+/// The disclosure that opens the paste-in field.
+pub const PASTE_LABEL: &str = "Paste LaTeX, MathML or OMML";
 
 /// The page column's widest width, points.
 const COLUMN_MAX: f32 = 900.0;
@@ -115,6 +122,8 @@ pub struct Showcase {
     import_error: Option<&'static str>,
     howto_open: bool,
     about_open: bool,
+    /// The second Copy row (OMML, text, SVG) is shown.
+    more_copy: bool,
     /// Where each Copy button was drawn last frame (for the browser test's real clicks).
     copy_rects: Vec<(CopyKind, egui::Rect)>,
 }
@@ -151,6 +160,7 @@ impl Showcase {
             import_error: None,
             howto_open: false,
             about_open: false,
+            more_copy: false,
             copy_rects: Vec::new(),
         }
     }
@@ -227,7 +237,7 @@ impl Showcase {
         true
     }
 
-    /// Paste text at the caret (what Ctrl+V in the editor does): OMML, LaTeX or linear text,
+    /// Paste text at the caret (what Ctrl+V in the editor does): MathML, OMML, LaTeX or linear text,
     /// replacing the selection. A refused paste leaves the equation alone.
     pub fn paste(&mut self, text: &str) -> Result<(), ImportError> {
         let imported = match export::import(text) {
@@ -248,7 +258,7 @@ impl Showcase {
         Ok(())
     }
 
-    /// Replace the whole equation with `text` (the "Paste LaTeX or OMML" field's Load).
+    /// Replace the whole equation with `text` (the paste-in field's Load).
     pub fn import(&mut self, text: &str) -> Result<(), ImportError> {
         match export::import(text) {
             Ok(i) => {
@@ -342,11 +352,21 @@ impl Showcase {
         self.about_open = on;
     }
 
-    /// Open or close the "More symbols", "Paste LaTeX or OMML" and "How to type" disclosures.
+    /// Open or close the "More symbols", paste-in and "How to type" disclosures.
     pub fn set_disclosures(&mut self, more: bool, import: bool, howto: bool) {
         self.symbols.more_open = more;
         self.import_open = import;
         self.howto_open = howto;
+    }
+
+    /// The second Copy row (OMML, text, SVG) is open.
+    pub fn more_copy(&self) -> bool {
+        self.more_copy
+    }
+
+    /// Open or close the second Copy row.
+    pub fn set_more_copy(&mut self, on: bool) {
+        self.more_copy = on;
     }
 
     /// Install the fonts and the theme on `ctx` now. [`Showcase::ui`] does it on its first
@@ -418,7 +438,7 @@ impl Showcase {
         ui.add_space(S32);
 
         // Paste in.
-        if palette::disclosure(ui, p, "Paste LaTeX or OMML", self.import_open).clicked() {
+        if palette::disclosure(ui, p, PASTE_LABEL, self.import_open).clicked() {
             self.import_open = !self.import_open;
         }
         if self.import_open {
@@ -475,7 +495,7 @@ impl Showcase {
         }
         ui.add_space(S12);
 
-        // Ctrl+V in the canvas: read the text as OMML, LaTeX or linear text, not as keystrokes.
+        // Ctrl+V in the canvas: read the text as MathML, OMML, LaTeX or linear text, not as keystrokes.
         let canvas = self.editor.canvas_id();
         if ui.memory(|m| m.has_focus(canvas)) {
             let pasted: Vec<String> = ui.input_mut(|i| {
@@ -529,16 +549,21 @@ impl Showcase {
     fn copy_row(&mut self, ui: &mut Ui, p: &Palette) {
         let now = ui.input(|i| i.time);
         let mut pressed = None;
+        let mut toggle_more = false;
         self.copy_rects.clear();
-        ui.horizontal_wrapped(|ui| {
+        // One line each, never wrapped: three buttons and "More" fit a 700 px window.
+        ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = vec2(S8, S8);
-            for kind in CopyKind::ALL {
-                let primary = kind == CopyKind::Latex;
-                let r = main_button(ui, p, kind.title(), primary).on_hover_text(kind.hint());
+            for kind in CopyKind::MAIN {
+                let r = main_button(ui, p, kind.title(), kind == CopyKind::Latex).on_hover_text(kind.hint());
                 self.copy_rects.push((kind, r.rect));
                 if r.clicked() {
                     pressed = Some(kind);
                 }
+            }
+            let hint = if self.more_copy { "Hide OMML, text and SVG" } else { "Show Copy OMML, Copy text and Download SVG" };
+            if toggle_button(ui, p, "More", self.more_copy).on_hover_text(hint).clicked() {
+                toggle_more = true;
             }
             // The inline confirmation, for two seconds.
             if let Some(s) = self.status.as_mut()
@@ -556,6 +581,24 @@ impl Showcase {
                 }
             }
         });
+        if self.more_copy {
+            ui.add_space(S8);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = vec2(S8, S8);
+                for kind in CopyKind::MORE {
+                    let r = main_button(ui, p, kind.title(), false).on_hover_text(kind.hint());
+                    self.copy_rects.push((kind, r.rect));
+                    if r.clicked() {
+                        pressed = Some(kind);
+                    }
+                }
+            });
+        }
+        ui.add_space(S8);
+        ui.add(egui::Label::new(RichText::new(COPY_GUIDE).size(T_BODY).color(p.muted)).wrap());
+        if toggle_more {
+            self.more_copy = !self.more_copy;
+        }
         if let Some(kind) = pressed {
             self.request_copy(kind);
             self.focus_editor(ui);
@@ -593,7 +636,7 @@ impl Showcase {
                             .id_salt("equashion-fallback")
                             .font(FontId::monospace(T_MONO))
                             .desired_width(f32::INFINITY)
-                            .desired_rows(if kind == CopyKind::Word { 6 } else { 2 })
+                            .desired_rows(if matches!(kind, CopyKind::MathMl | CopyKind::Omml) { 6 } else { 2 })
                             .margin(Margin::same(S8 as i8))
                             .show(ui);
                         if select {
@@ -645,7 +688,7 @@ impl Showcase {
         ui.add(
             egui::Label::new(
                 RichText::new(
-                    "Paste LaTeX (with or without $ signs), an m:oMath element from Word, or plain text like a/b. Load replaces the equation.",
+                    "Paste LaTeX (with or without $ signs), a MathML math element, an m:oMath element from Word, or plain text like a/b. Load replaces the equation.",
                 )
                 .size(T_BODY)
                 .color(p.muted),
@@ -660,7 +703,7 @@ impl Showcase {
                 .desired_width(f32::INFINITY)
                 .desired_rows(4)
                 .margin(Margin::same(S8 as i8))
-                .hint_text(r"\frac{a}{b}   or   <m:oMath>...</m:oMath>"),
+                .hint_text(r"\frac{a}{b}   or   <math>...</math>   or   <m:oMath>...</m:oMath>"),
         );
         ui.add_space(S8);
         if main_button(ui, p, "Load", true).clicked() {
@@ -752,6 +795,26 @@ fn main_button(ui: &mut Ui, p: &Palette, text: &str, primary: bool) -> egui::Res
     .inner
 }
 
+/// A 36 px button that stays pressed-looking while `on` (the "More" toggle).
+fn toggle_button(ui: &mut Ui, p: &Palette, text: &str, on: bool) -> egui::Response {
+    ui.scope(|ui| {
+        if on {
+            let w = &mut ui.visuals_mut().widgets;
+            for v in [&mut w.inactive, &mut w.hovered] {
+                v.bg_fill = p.accent_soft;
+                v.weak_bg_fill = p.accent_soft;
+                v.fg_stroke = Stroke::new(1.0, p.accent_text);
+            }
+        }
+        ui.spacing_mut().button_padding = vec2(S16, S8);
+        let b = egui::Button::new(RichText::new(text).size(T_BODY)).min_size(vec2(0.0, BUTTON_H)).wrap_mode(egui::TextWrapMode::Extend).selected(on);
+        let r = ui.add(b);
+        r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, text));
+        r
+    })
+    .inner
+}
+
 /// A theme segment: text on a tinted background when selected, a hover fill, and the accent
 /// focus ring when it has the keyboard.
 fn segment(ui: &mut Ui, p: &Palette, selected: bool, text: &str, hint: &str) -> egui::Response {
@@ -808,7 +871,7 @@ fn about(ui: &mut Ui, p: &Palette) {
     section(ui, "What it is", true);
     body(
         ui,
-        "An equation editor written in Rust: you type the formatted equation directly, then copy it as LaTeX, as an Office equation, as text or as a picture. This page is the WebAssembly build, drawn with WebGL2.",
+        "An equation editor written in Rust: you type the formatted equation directly, then copy it as LaTeX, MathML, an Office equation (OMML), text or a picture. This page is the WebAssembly build, drawn with WebGL2.",
     );
     section(ui, "Credits", false);
     ui.horizontal_wrapped(|ui| {
@@ -826,7 +889,9 @@ fn about(ui: &mut Ui, p: &Palette) {
     body(ui, "MIT OR Apache-2.0, at your option.");
     section(ui, "Known limits", false);
     for item in [
-        "Copy for Word and Copy image depend on what your browser lets a page put on the clipboard; see the README.",
+        "Copy MathML and Copy image depend on what your browser lets a page put on the clipboard; see the README.",
+        "LibreOffice Writer pastes MathML as plain text; in LibreOffice Math use Tools > Import MathML from Clipboard. LibreOffice drops accents such as a hat.",
+        "ONLYOFFICE shows the characters <, > and & in a pasted equation as &lt;, &gt; and &amp;.",
         "Typed or pasted \\langle, \\lfloor, \\lceil and \\Vert give plain characters; the Brackets group makes stretchy ones.",
         "Unknown backslash commands are kept as plain text.",
         "Only the bundled fonts are used. A character none of them has shows as a missing glyph.",

@@ -1,5 +1,5 @@
 //! The equaSHion web page: one egui app with the equation editor, a symbol palette, Copy
-//! buttons (LaTeX, Word, text, image, SVG), a paste-in field and examples.
+//! buttons (LaTeX, MathML, image; OMML, text and SVG behind "More"), a paste-in field and examples.
 //!
 //! Everything but the browser shell ([`web`], wasm only) is plain egui, so the native tests
 //! drive the same [`Showcase`] with egui_kittest.
@@ -16,5 +16,5 @@ pub mod theme;
 pub mod web;
 
 pub use export::CopyKind;
-pub use showcase::{CREDIT, CopyRequest, EXAMPLES, HOW_TO_TYPE, MATHLIVE_URL, Outcome, Showcase, TAGLINE};
+pub use showcase::{COPY_GUIDE, CREDIT, CopyRequest, EXAMPLES, HOW_TO_TYPE, MATHLIVE_URL, Outcome, PASTE_LABEL, Showcase, TAGLINE};
 pub use theme::ThemePref;

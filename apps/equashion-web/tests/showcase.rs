@@ -6,7 +6,7 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use equashion_math::{Editor, Key as MKey, Math, to_latex};
 use equashion_web::export::Data;
-use equashion_web::{CREDIT, CopyKind, EXAMPLES, HOW_TO_TYPE, Outcome, Showcase, ThemePref, corpus};
+use equashion_web::{COPY_GUIDE, CREDIT, CopyKind, EXAMPLES, HOW_TO_TYPE, Outcome, PASTE_LABEL, Showcase, ThemePref, corpus};
 
 fn harness_at(w: f32) -> Harness<'static, Showcase> {
     let mut h = Harness::builder().with_size(vec2(w, 1000.0)).build_ui_state(
@@ -49,6 +49,13 @@ fn copy_buttons_queue_their_payloads() {
     let mut h = harness();
     h.state_mut().set_latex(r"\frac{a}{b}");
     h.run();
+    // OMML, text and SVG are behind "More".
+    for kind in CopyKind::MORE {
+        assert!(h.query_by_label(kind.title()).is_none(), "{kind:?} is shown before More");
+    }
+    h.get_by_label("More").click();
+    h.run();
+    assert!(h.state().more_copy());
     for kind in CopyKind::ALL {
         h.get_by_label(kind.title()).click();
         h.run();
@@ -58,9 +65,17 @@ fn copy_buttons_queue_their_payloads() {
         assert_eq!(p.kind, kind);
         match kind {
             CopyKind::Latex => assert_eq!(p.fallback_text(), Some(r"\frac{a}{b}")),
-            CopyKind::Word => {
-                assert!(p.fallback_text().is_some_and(|t| t.contains("<m:f>")));
-                assert!(p.get("text/html").is_some());
+            CopyKind::MathMl => {
+                assert!(
+                    p.fallback_text().is_some_and(
+                        |t| t.starts_with("<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">") && t.contains("<mfrac>")
+                    )
+                );
+                assert!(p.get("text/html").and_then(Data::as_text).is_some_and(|h| h.contains("<!--StartFragment--><math xmlns=")));
+            }
+            CopyKind::Omml => {
+                assert!(p.fallback_text().is_some_and(|t| t.starts_with("<m:oMath xmlns:m=") && t.contains("<m:f>")));
+                assert_eq!(p.items.len(), 1);
             }
             CopyKind::Text => assert_eq!(p.fallback_text(), Some("a/b")),
             CopyKind::Image => assert!(matches!(p.get("image/png"), Some(Data::Bytes(b)) if b.starts_with(b"\x89PNG"))),
@@ -102,10 +117,11 @@ fn copied_confirms_and_blocked_shows_a_fallback() {
 }
 
 #[test]
-fn ctrl_v_in_the_editor_reads_omml_latex_and_text() {
+fn ctrl_v_in_the_editor_reads_mathml_omml_latex_and_text() {
     let mut h = harness();
     let omml = "<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><m:f><m:num><m:r><m:t>1</m:t></m:r></m:num><m:den><m:r><m:t>2</m:t></m:r></m:den></m:f></m:oMath>";
-    for (pasted, latex) in [(omml, r"\frac{1}{2}"), (r"$\sqrt{x}$", r"\sqrt{x}"), ("a^2+b^2", "a^2+b^2")] {
+    let mathml = "<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><msup><mi>x</mi><mn>2</mn></msup></math>";
+    for (pasted, latex) in [(omml, r"\frac{1}{2}"), (mathml, "x^2"), (r"$\sqrt{x}$", r"\sqrt{x}"), ("a^2+b^2", "a^2+b^2")] {
         h.state_mut().set_latex("");
         h.run();
         h.event(egui::Event::Paste(pasted.to_string()));
@@ -136,7 +152,7 @@ fn ctrl_v_in_the_editor_reads_omml_latex_and_text() {
 #[test]
 fn the_import_field_replaces_the_equation() {
     let mut h = harness();
-    h.get_by_label("Paste LaTeX or OMML").click();
+    h.get_by_label(PASTE_LABEL).click();
     h.run();
     h.get_by_label("Load");
     assert!(h.state_mut().import(r"\frac{p}{q}").is_ok());
@@ -285,16 +301,44 @@ fn every_how_to_type_line_does_what_it_says() {
 }
 
 #[test]
-fn copy_buttons_stay_on_one_line_each_at_700_px() {
+fn copy_rows_do_not_wrap_at_1280_and_700_px() {
     for w in [1280.0, 700.0] {
-        let h = harness_at(w);
-        let mut heights = Vec::new();
-        for kind in CopyKind::ALL {
-            let n = h.get_by_label(kind.title());
-            heights.push(n.rect().height());
-        }
-        assert!(heights.iter().all(|&ht| (ht - 36.0).abs() < 0.5), "{w}: {heights:?}");
+        let mut h = harness_at(w);
+        h.state_mut().set_more_copy(true);
+        h.run();
+        let row = |kinds: &[CopyKind], extra: Option<&str>| {
+            let mut rects: Vec<egui::Rect> = kinds.iter().map(|k| h.get_by_label(k.title()).rect()).collect();
+            if let Some(l) = extra {
+                rects.push(h.get_by_label(l).rect());
+            }
+            for r in &rects {
+                assert!((r.height() - 36.0).abs() < 0.5, "{w}: {rects:?}");
+                assert!((r.min.y - rects[0].min.y).abs() < 0.5, "{w}: the row wrapped: {rects:?}");
+            }
+            // Left to right, in button order.
+            assert!(rects.windows(2).all(|p| p[0].max.x < p[1].min.x), "{w}: {rects:?}");
+            rects
+        };
+        let main = row(&CopyKind::MAIN, Some("More"));
+        let more = row(&CopyKind::MORE, None);
+        assert!(more[0].min.y > main[0].max.y, "{w}: the More row is below the main row");
     }
+}
+
+#[test]
+fn the_copy_guide_is_one_line_of_true_claims() {
+    let h = harness();
+    h.get_by_label(COPY_GUIDE);
+    // One sentence per target, and Word is only ever a suggestion (no Office install here).
+    assert!(COPY_GUIDE.contains("ONLYOFFICE") && COPY_GUIDE.contains("Paste Special > Unformatted Text"));
+    assert!(COPY_GUIDE.contains("in Word, try"));
+    // One sentence.
+    assert!(COPY_GUIDE.ends_with('.') && COPY_GUIDE.matches(". ").count() == 0, "{COPY_GUIDE}");
+    assert!(!COPY_GUIDE.contains("LibreOffice"));
+    assert_eq!(CopyKind::MAIN.map(CopyKind::title), ["Copy LaTeX", "Copy MathML", "Copy image"]);
+    assert_eq!(CopyKind::MORE.map(CopyKind::title), ["Copy OMML", "Copy text", "Download SVG"]);
+    assert_eq!(CopyKind::parse("word"), Some(CopyKind::MathMl));
+    assert_eq!(CopyKind::parse("MATHML"), Some(CopyKind::MathMl));
 }
 
 #[test]

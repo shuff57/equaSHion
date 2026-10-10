@@ -54,7 +54,14 @@ check "unknownCommands()" "(() => { eq.setLinear('\\\\foo+x'); const u = eq.unkn
 # Copy payloads (the hook builds them and tries the real clipboard; without a click the
 # browser may refuse, so the status is copied or blocked).
 check "copy('latex')" "eq.setLatex('\\\\frac{a}{b}') && eq.copy('latex').then(r => (r.kind === 'latex' && ['copied', 'blocked'].includes(r.status) && r.items['text/plain'] === '\\\\frac{a}{b}') || r)"
-check "copy('word') is OMML with m:f" "eq.copy('word').then(r => { const t = r.items['text/plain'], h = r.items['text/html']; return (t.startsWith('<m:oMath xmlns:m=') && t.includes('<m:f>') && h.includes('msEquation') && h.includes('<m:f>') && h.includes('data:image/png;base64,')) || [t, h.slice(0, 200)]; })"
+# MathML: the exact header, well-formed XML (the browser's own XML parser), the MathML namespace
+# on the root, no named entities, and the same <math> element alone in the HTML fragment.
+MATHML_OK="(t, h) => { const head = '<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">'; const d = new DOMParser().parseFromString(t, 'application/xml'); const bad = d.getElementsByTagName('parsererror').length > 0; const root = d.documentElement; const ok = t.startsWith(head) && !bad && root.localName === 'math' && root.namespaceURI === 'http://www.w3.org/1998/Math/MathML' && !/&[A-Za-z]/.test(t) && !t.includes('mfenced') && h === '<html><body><!--StartFragment-->' + t + '<!--EndFragment--></body></html>'; return ok || [t.slice(0, 120), bad, root && root.namespaceURI, h.slice(0, 120)]; }"
+check "copy('mathml') is well-formed MathML" "eq.setLatex('\\\\frac{a}{b}') && eq.copy('mathml').then(r => r.kind === 'mathml' && Object.keys(r.items).join() === 'text/plain,text/html' ? ($MATHML_OK)(r.items['text/plain'], r.items['text/html']) : r)"
+check "  with a fraction" "eq.copy('mathml').then(r => r.items['text/plain'].includes('<mfrac><mi>a</mi><mi>b</mi></mfrac>') || r.items['text/plain'])"
+check "  for the quadratic formula" "eq.loadExample('quadratic') && eq.copy('mathml').then(r => { const t = r.items['text/plain']; const e = ($MATHML_OK)(t, r.items['text/html']); return e === true ? (t.includes('<msqrt>') && t.includes('<msup>')) || t : e; })"
+check "copy('word') is the mathml alias" "eq.copy('word').then(r => r.kind === 'mathml' || r.kind)"
+check "copy('omml') is OMML with m:f" "eq.setLatex('\\\\frac{a}{b}') && eq.copy('omml').then(r => { const t = r.items['text/plain']; return (r.kind === 'omml' && Object.keys(r.items).join() === 'text/plain' && t.startsWith('<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"') && t.includes('<m:f>')) || [r.kind, t]; })"
 check "copy('text') is linear" "eq.copy('text').then(r => r.items['text/plain'] === 'a/b' || r.items)"
 check "copy('image') is a PNG" "eq.copy('image').then(r => { const b = r.items['image/png']; const magic = [137, 80, 78, 71, 13, 10, 26, 10]; return (b instanceof Uint8Array && b.length > 500 && magic.every((v, i) => b[i] === v)) || [typeof b, b && b.length]; })"
 check "copy('svg') downloads an <svg>" "eq.copy('svg').then(r => (r.status === 'downloaded' && r.items['image/svg+xml'].startsWith('<svg')) || [r.status, r.items['image/svg+xml'].slice(0, 40)])"
@@ -72,13 +79,25 @@ read -r CX CY <<<"$(eq_rect latex)"
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 8
 check "click Copy LaTeX writes text/plain" "(() => { const s = eq.copyStatus(); const w = window.__eqSet; return (s.kind === 'latex' && s.state === 'copied' && w.some(([t, d]) => t === 'text/plain' && d === 'x^2+1')) || [s, w]; })()"
-check "setLatex for the Word click" "eq.setLatex('\\\\frac{1}{2}') === '\\\\frac{1}{2}'"
+check "setLatex for the MathML click" "eq.setLatex('\\\\frac{1}{2}') === '\\\\frac{1}{2}'"
 frames 4
-read -r CX CY <<<"$(eq_rect word)"
+read -r CX CY <<<"$(eq_rect mathml)"
+[ "$CX" != "none" ] || fail "no Copy MathML button rect"
 pw --raw eval "() => { window.__eqSet = []; return true; }" >/dev/null
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 8
-check "click Copy for Word writes OMML and HTML" "(() => { const s = eq.copyStatus(); const w = window.__eqSet; const t = w.find(x => x[0] === 'text/plain'), h = w.find(x => x[0] === 'text/html'); return (s.state === 'copied' && t && t[1].includes('<m:f>') && h && h[1].includes('msEquation')) || [s, w.map(x => x[0])]; })()"
+check "click Copy MathML writes MathML as text and HTML" "(() => { const s = eq.copyStatus(); const w = window.__eqSet; const t = w.find(x => x[0] === 'text/plain'), h = w.find(x => x[0] === 'text/html'); return (s.kind === 'mathml' && s.state === 'copied' && t && t[1].startsWith('<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">') && t[1].includes('<mfrac><mn>1</mn><mn>2</mn></mfrac>') && h && h[1].includes('<!--StartFragment-->' + t[1] + '<!--EndFragment-->')) || [s, w.map(x => x[0])]; })()"
+# The second row: OMML, text and SVG are behind More.
+check "OMML button hidden until More" "eq.copyButtonRect('omml') === null || eq.copyButtonRect('omml')"
+check "showMoreCopy(true)" "eq.showMoreCopy(true) === true"
+frames 4
+check "  OMML, text and SVG buttons shown" "['omml', 'text', 'svg'].every(k => eq.copyButtonRect(k) !== null) || ['omml', 'text', 'svg'].map(k => eq.copyButtonRect(k))"
+check "  main row on one line, More row below" "(() => { const r = ['latex', 'mathml', 'image'].map(k => eq.copyButtonRect(k)); const m = eq.copyButtonRect('omml'); return (r.every(x => Math.abs(x.y - r[0].y) < 1) && m.y > r[0].y + r[0].h) || [r, m]; })()"
+read -r CX CY <<<"$(eq_rect omml)"
+pw --raw eval "() => { window.__eqSet = []; return true; }" >/dev/null
+pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
+frames 8
+check "click Copy OMML writes OMML text" "(() => { const s = eq.copyStatus(); const w = window.__eqSet; return (s.kind === 'omml' && s.state === 'copied' && w.length === 1 && w[0][0] === 'text/plain' && w[0][1].startsWith('<m:oMath xmlns:m=')) || [s, w]; })()"
 read -r CX CY <<<"$(eq_rect image)"
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 pw --raw eval "async () => { for (let i = 0; i < 40; i++) { const s = window.equashion.copyStatus(); if (s && s.kind === 'image' && s.state !== 'pending') return true; await new Promise(r => setTimeout(r, 50)); } return true; }" >/dev/null
@@ -95,6 +114,12 @@ OMML="'<m:oMath xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/
 check "paste event with OMML" "$(paste_js "$OMML")"
 frames 4
 check "  OMML loaded" "eq.latex() === '\\\\frac{1}{2}' || eq.latex()"
+MML="'<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\"><msqrt><msup><mi>x</mi><mn>2</mn></msup><mo>+</mo><mn>1</mn></msqrt></math>'"
+check "paste event with MathML" "$(paste_js "$MML")"
+frames 4
+check "  MathML loaded" "eq.latex() === '\\\\sqrt{x^2+1}' || eq.latex()"
+check "paste hook reads MathML from copy('mathml')" "eq.setLatex('\\\\sum_{i=1}^n i^2') && eq.copy('mathml').then(r => { eq.setLatex(''); const l = eq.paste(r.items['text/plain']); return l === '\\\\sum_{i=1}^ni^2' || l; })"
+check "paste hook refuses broken MathML" "(() => { eq.setLatex('y'); const r = eq.paste('<math><mrow>'); return (r === null && eq.latex() === 'y') || [r, eq.latex()]; })()"
 check "paste event with LaTeX" "$(paste_js "'\$\\\\sqrt{x}+\\\\alpha\$'")"
 frames 4
 check "  LaTeX loaded" "eq.latex() === '\\\\sqrt{x}+\\\\alpha' || eq.latex()"
@@ -120,7 +145,7 @@ shot() {
     pw screenshot --filename "$OUT/$name.png" >/dev/null
     python3 -I "$HERE/check_png.py" "$OUT/$name.png" "$theme" || fail "$name screenshot looks blank or has the wrong theme"
 }
-check "closed disclosures" "eq.setDisclosures(false, false, false) && eq.showAbout(false)"
+check "closed disclosures" "eq.setDisclosures(false, false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
 for width in 1280 700; do
     pw resize "$width" 900 >/dev/null
     for theme in light dark; do
@@ -128,14 +153,14 @@ for width in 1280 700; do
     done
 done
 # Everything open, tall window: the whole page down to the About panel.
-check "open disclosures" "eq.setDisclosures(true, true, true) && eq.showAbout(true)"
+check "open disclosures" "eq.setDisclosures(true, true, true) && eq.showAbout(true) && eq.showMoreCopy(true)"
 for width in 1280 700; do
     pw resize "$width" 2900 >/dev/null
     for theme in light dark; do
         shot "open-$theme-$width" "$theme"
     done
 done
-check "close disclosures" "eq.setDisclosures(false, false, false) && eq.showAbout(false)"
+check "close disclosures" "eq.setDisclosures(false, false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
 pw resize 1280 900 >/dev/null
 check "setTheme(system)" "eq.setTheme('system') && eq.themePreference() === 'system' || eq.themePreference()"
 check "still on the editor with an equation" "eq.activeTab() === 'editor' && eq.latex().length > 0"

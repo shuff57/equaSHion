@@ -18,12 +18,12 @@ and [DIVERGENCE.md](DIVERGENCE.md) for behaviour that now differs from WordCraft
 
 | Crate | Path | Depends on | What it does |
 |---|---|---|---|
-| `equashion-math` | `crates/math` | quick-xml, serde | Math tree, OMML import/export, linear format, templates, edit model (`Editor`, `Caret`, `Key`) |
+| `equashion-math` | `crates/math` | quick-xml, serde | Math tree, OMML import/export, presentation MathML import/export (`to_mathml`, `from_mathml`), linear format, templates, edit model (`Editor`, `Caret`, `Key`) |
 | `equashion-font` | `crates/font` | skrifa, harfrust, kurbo | Font database (`FontDb`, `FontDb::bundled_only()`), outlines, fallback, shaping; bundles Source Serif 4 (default family), Inter and STIX Two Math (symbol fallback) |
 | `equashion-layout` | `crates/layout` | math, font, kurbo | `layout_equation` -> `EqLayout` (a `Scene` plus caret rectangles and hit testing), `layout_math_wrapped`, `LayoutCache`, the `MathFonts` trait |
 | `equashion-render` | `crates/render` | layout, vello_cpu | `render_scene` / `render_eq` to premultiplied RGBA, `scene_to_svg` |
 | `equashion-egui` | `crates/egui` | math, layout, render, egui | `EquationEditor`: the equation editor as an egui widget (palette, canvas with caret, linear field), no host types |
-| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web page: the editor with a symbol palette, Copy as LaTeX / Word / text / image / SVG, paste-in, examples, light and dark themes, `window.equashion` test hooks |
+| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web page: the editor with a symbol palette, Copy as LaTeX / MathML / image (and OMML / text / SVG behind More), paste-in, examples, light and dark themes, `window.equashion` test hooks |
 | `xtask` | `xtask` | std | `cargo xtask check`, `bless`, `web`, `serve`, `smoke` |
 
 ```rust
@@ -100,8 +100,11 @@ One centred column, top to bottom:
   Brackets, Accents, Functions and the rest behind **More symbols**), then the `EquationEditor`
   canvas. Every palette face is rendered by equashion-render, not by egui's fonts. A long
   equation shrinks to half size and then scrolls sideways to keep the caret in view.
-- **Copy row** under the canvas, and the current LaTeX in a read-only line you can select.
-- **Paste LaTeX or OMML** (a disclosure): a field and a Load button that replaces the equation.
+- **Copy row** under the canvas: Copy LaTeX, Copy MathML, Copy image and **More**, which opens
+  a second row with Copy OMML, Copy text and Download SVG. Neither row wraps at 700 px. One line
+  under it says where each format pastes. Then the current LaTeX in a read-only line you can
+  select.
+- **Paste LaTeX, MathML or OMML** (a disclosure): a field and a Load button that replaces the equation.
 - **Try it**: ten examples from `corpus/equations.tsv`, and **How to type**, a short cheat sheet
   (each line is checked against the editor in `apps/equashion-web/tests/showcase.rs`).
 - **Footer**: the MathLive credit and **About and licences**, which opens a panel with what it
@@ -109,13 +112,62 @@ One centred column, top to bottom:
 
 ### What each Copy button puts on the clipboard
 
-| Button | MIME types | Content | Pastes into |
-|---|---|---|---|
-| Copy LaTeX | `text/plain` | `to_latex` (`x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}`) | Overleaf, Markdown with math, Anki, any LaTeX editor; MathLive and other LaTeX-aware editors |
-| Copy for Word | `text/plain`, `text/html` | plain: OMML, an `m:oMath` element with its namespace declared. HTML: the same OMML inside the `<!--[if gte msEquation 12]>` conditional comment Word itself writes on its clipboard, and a PNG `<img>` (black on white) in the branch other programs read | Meant for Word, PowerPoint and Outlook on the desktop. **Not verified in Word**: no Office install was available when this was built. Programs that ignore the conditional comment (Google Docs, LibreOffice, mail clients) get the picture from the HTML, or the raw OMML text where they only take plain text |
-| Copy text | `text/plain` | `to_linear` (`x=(−b±√(b^2−4ac))/2a`) | anywhere; the linear form also pastes back into this page |
-| Copy image | `image/png` | black ink on white at 2 pixels per point, 20 pt equation size, tagged 144 dpi | Word, PowerPoint, Google Docs, chat apps, image editors |
-| Download SVG | (a file, `image/svg+xml`) | `equation.svg` from equashion-render's SVG backend, black ink, glyphs as paths | Inkscape, Illustrator, browsers, Word and PowerPoint (Insert Picture) |
+| Button | MIME types | Content |
+|---|---|---|
+| Copy LaTeX | `text/plain` | `to_latex` (`x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}`) |
+| Copy MathML | `text/plain`, `text/html` | plain: `to_mathml_display(m, true)`, which starts exactly with `<math xmlns="http://www.w3.org/1998/Math/MathML" display="block">` (no XML declaration, no DOCTYPE, no prefix, no named entities). HTML: `<html><body><!--StartFragment-->` + the same `<math>` element + `<!--EndFragment--></body></html>`, nothing else (no image) |
+| Copy image | `image/png` | black ink on white at 2 pixels per point, 20 pt equation size, tagged 144 dpi |
+| Copy OMML (More) | `text/plain` | `to_omml`: `m:oMathPara` / `m:oMath` with `xmlns:m` declared. For programs and code that read OMML |
+| Copy text (More) | `text/plain` | `to_linear` (`x=(−b±√(b^2−4ac))/2a`); pastes back into this page |
+| Download SVG (More) | (a file, `image/svg+xml`) | `equation.svg` from equashion-render's SVG backend, black ink, glyphs as paths |
+
+The `copy(kind)` hook takes `mathml`; `word` (the old "Copy for Word") is an alias of it.
+
+#### Where it pastes: what was verified
+
+Tested on Fedora 44 (KDE, Wayland) on 2026-10-10. The real-paste tests ran in a private Xvfb
+display with their own ONLYOFFICE and LibreOffice instances, a PySide6 clipboard owner offering
+`text/plain` + `text/html` exactly as the page writes them, and `xdotool` for Ctrl+V; the
+results were saved and the saved files inspected.
+
+- **ONLYOFFICE Desktop Editors 9.4.0** (flatpak), document editor: pasting Copy MathML gives an
+  equation. ONLYOFFICE reads the `text/html` copy: with `text/html` alone the saved `.docx` has
+  `<m:oMathPara><m:oMath>` with `m:f`, `m:rad`, `m:sSup`; with `text/plain` alone the MathML
+  arrives as literal text. All 44 rows of `corpus/equations.tsv` were pasted one by one, saved,
+  and read back with `from_omml`: every row came back as an equation with its structure
+  (fractions, roots, scripts, n-ary operators with limits, matrices and cases in delimiters,
+  limits, accents, braces, boxes). ONLYOFFICE turns letters into math italic (`𝑥`) and writes
+  integrals with limits above and below.
+  - ONLYOFFICE bug: `<`, `>` and `&` inside the equation show as the text `&lt;`, `&gt;`,
+    `&amp;`, whether written as numeric references, named entities or CDATA.
+  - ONLYOFFICE reads an `munder`/`mover` that is not an accent or a brace as a limit and
+    swallows the element after it. The writer therefore puts U+2061 (function application, as
+    Word writes `lim`) after limits and over/under arrows, and writes accents with the
+    combining mark (U+0302 and so on), which ONLYOFFICE maps to `m:acc`.
+- **LibreOffice 26.2.6.3**: Writer does **not** convert pasted MathML. A real Ctrl+V of the page's
+  clipboard gave the flat text `x=−b±b2−4ac2a` (Writer takes the HTML and drops the markup); the
+  same happens when an `.html` file with the `<math>` fragment is converted headlessly. In
+  **LibreOffice Math**, Tools > Import MathML from Clipboard with the same clipboard gives the
+  formula `x = frac{-b +- sqrt{b^2-4ac}}{2a}`. A `.mml` file of the MathML opens as a formula
+  (`soffice --headless --convert-to odf`, the StarMath annotation shows the structure: sums,
+  integrals, matrices, roots, limits, fractions, cases). LibreOffice drops accents (hat, vec,
+  bar...) on MathML import, even from MathML it exported itself.
+- **OMML in a document**: a `.docx` whose `w:p` holds `to_omml` output for three equations opens
+  as three formula objects in LibreOffice (`--convert-to odt`) and in ONLYOFFICE's converter
+  (`x2t omml.docx omml.odt`).
+- **Image**: the PNG bytes are checked (magic, size) in the smoke test; pasting them anywhere
+  was not tested beyond that.
+
+#### Not verified
+
+- **Microsoft Word** (no Office install here). Word is documented to turn pasted *text* that
+  starts with a MathML header into an equation, sometimes only through Paste Special >
+  Unformatted Text, which is why Copy MathML also writes the MathML as `text/plain` and the
+  page's one-line guide names that route. Whether Word prefers the `text/html` copy on a normal
+  Ctrl+V is not known.
+- PowerPoint, Google Docs, Pages, Outlook, WordCraft and DeckCraft.
+- LaTeX targets (Overleaf, Markdown, Anki): the LaTeX is the same text as before and was not
+  re-tested in those programs.
 
 How the browser writes it (`apps/equashion-web/index.html`): text kinds go through a `copy`
 event started with `document.execCommand('copy')` inside the click, which writes every type
@@ -125,8 +177,8 @@ with a `ClipboardItem`. The image always uses `navigator.clipboard.write` with a
 
 - The Clipboard API only exists on HTTPS pages and `localhost` / `127.0.0.1`. Served over plain
   HTTP elsewhere, every Copy falls back.
-- `navigator.clipboard.write` with `text/html` may be sanitised by Chromium (which can drop the
-  conditional comment); that is why text goes through the `copy` event first.
+- `navigator.clipboard.write` with `text/html` may be sanitised by Chromium; that is why text goes
+  through the `copy` event first, which writes the HTML exactly as given.
 - Image copy needs `ClipboardItem` with `image/png`: Chromium and Edge, Firefox 127 and later,
   Safari 13.1 and later. Safari may refuse it here because the write starts in the next
   animation frame rather than directly in the click handler.
@@ -135,12 +187,13 @@ with a `ClipboardItem`. The image always uses `navigator.clipboard.write` with a
 
 ### Paste in
 
-Ctrl+V (Cmd+V) in the canvas reads the clipboard text as OMML when it starts with `<` and has an
-`<m:oMath` or `<oMath` element, as LaTeX when it has a backslash or a `$` wrapper (`$..$`,
+Ctrl+V (Cmd+V) in the canvas reads the clipboard text as MathML when it starts with `<` and has a
+`<math>` element (with or without a prefix such as `mml:`, also inside an HTML fragment), as OMML
+when it starts with `<` and has an `<m:oMath` or `<oMath` element, as LaTeX when it has a backslash or a `$` wrapper (`$..$`,
 `$$..$$`, `\(..\)` and `\[..\]` are dropped), and as linear text otherwise, and inserts it at
-the caret (replacing a selection). The Paste LaTeX or OMML field reads the same way but replaces
-the whole equation. Unknown backslash commands are named in one sentence under the canvas.
-Text over 20000 characters, empty text and OMML with no content are refused with a sentence;
+the caret (replacing a selection). The Paste LaTeX, MathML or OMML field reads the same way but
+replaces the whole equation. Unknown backslash commands are named in one sentence under the canvas.
+Text over 20000 characters, empty text and OMML or MathML with no content are refused with a sentence;
 the parsers have depth and size limits, so hostile input does not panic (unit-tested). Copying
 an equation out of Word puts its linear or LaTeX form, not OMML, in the plain-text clipboard,
 so a paste from Word arrives as text.
@@ -166,17 +219,22 @@ Needs `trunk` (0.21) and the `wasm32-unknown-unknown` target; `wasm-bindgen` is 
 `=0.2.128` to match the installed `wasm-bindgen` CLI. The canvas is opaque to the DOM, so the
 page exposes test hooks on `window.equashion` (the full table is at the top of
 `apps/equashion-web/src/web.rs`): `linear()`, `omml()`, `latex()`, `setLinear(s)`,
-`setLatex(s)`, `paste(s)`, `copy(kind)` (`latex`, `word`, `text`, `image`, `svg`; a Promise of
-`{kind, status, items}` with each MIME type's data), `copyStatus()`, `copyButtonRect(kind)`,
+`setLatex(s)`, `paste(s)`, `copy(kind)` (`latex`, `mathml`, `image`, `omml`, `text`, `svg`;
+`word` is an alias of `mathml`; a Promise of `{kind, status, items}` with each MIME type's data),
+`copyStatus()`, `copyButtonRect(kind)` (`null` for a button behind More while it is closed),
+`showMoreCopy(on)`,
 `examples()`, `loadExample(idOrName)`, `selftest()`, `galleryCount()`, `activeTab()` (always
 `editor`), `setTab(name)` (accepted and ignored), `showAbout(on)`,
 `setDisclosures(more, paste, howto)`, `unknownCommands()`, `theme()`, `themePreference()`,
 `setTheme(name)` and `ready`.
 
 The smoke test uses its own playwright-cli session (`equashion`). It checks the hooks and every
-Copy payload (OMML with `m:f` for a fraction, PNG magic bytes, an `<svg` document), clicks Copy
-LaTeX and Copy for Word for real and records what the page hands the clipboard, dispatches
-real paste events with OMML, LaTeX and linear text, loads every example, and saves screenshots
+Copy payload (MathML that starts with the exact header, parses with the browser's XML parser with
+the MathML namespace on the root and has no named entities, the same `<math>` in the HTML
+fragment; OMML with `m:f` for a fraction; PNG magic bytes; an `<svg` document), clicks Copy LaTeX,
+Copy MathML and (after More) Copy OMML for real and records what the page hands the clipboard,
+dispatches real paste events with MathML, OMML, LaTeX and linear text, pastes the output of
+`copy('mathml')` back in, loads every example, and saves screenshots
 in both themes at 1280 and 700 px wide (closed, and with every disclosure and About open) to
 `tests/browser/out/` (gitignored), failing if one is blank or has the wrong theme's brightness
 (`tests/browser/check_png.py`). The page is plain egui and is also tested natively with

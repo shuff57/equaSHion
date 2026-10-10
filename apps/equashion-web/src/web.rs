@@ -10,9 +10,10 @@
 //! | `setLinear(s)` | loads `s` into the editor; returns `linear()` |
 //! | `setLatex(s)` | loads LaTeX `s` (a `$..$` wrapper is dropped); returns `latex()` |
 //! | `paste(s)` | what Ctrl+V in the editor does with `s`; returns `latex()`, or `null` when refused |
-//! | `copy(kind)` | presses a Copy button (`latex`, `word`, `text`, `image`, `svg`); a Promise of `{kind, status, items}` where `items` maps each MIME type to a string or a `Uint8Array`, and `status` is `copied`, `downloaded` or `blocked` |
+//! | `copy(kind)` | presses a Copy button (`latex`, `mathml`, `image`, `omml`, `text`, `svg`; `word` is an alias of `mathml`); a Promise of `{kind, status, items}` where `items` maps each MIME type to a string or a `Uint8Array`, and `status` is `copied`, `downloaded` or `blocked` |
 //! | `copyStatus()` | `{kind, state}` of the last Copy action, or `null` |
-//! | `copyButtonRect(kind)` | `{x, y, w, h}` of that Copy button in CSS pixels (for real clicks), or `null` |
+//! | `copyButtonRect(kind)` | `{x, y, w, h}` of that Copy button in CSS pixels (for real clicks), or `null` when it is not on screen (OMML, text and SVG are behind "More") |
+//! | `showMoreCopy(on)` | opens or closes the second Copy row; returns `on` |
 //! | `examples()` | `[{id, name}]` of the Try it examples |
 //! | `loadExample(idOrName)` | loads one; returns `latex()`, or `null` when unknown |
 //! | `selftest()` | `{ok, total, failures: [{id, reason}], missingGlyphs}` (runs it now) |
@@ -254,7 +255,7 @@ fn install_hooks(s: Shared, ctx: egui::Context) -> Result<(), JsValue> {
     let (a, c) = (s.clone(), ctx.clone());
     let f = Closure::<dyn Fn(String) -> Promise>::new(move |kind: String| {
         let Some(k) = CopyKind::parse(&kind) else {
-            return Promise::reject(&JsValue::from_str(&format!("unknown kind {kind}: latex, word, text, image or svg")));
+            return Promise::reject(&JsValue::from_str(&format!("unknown kind {kind}: latex, mathml, image, omml, text or svg")));
         };
         let requests = with(&a, |app| {
             app.request_copy(k);
@@ -336,6 +337,15 @@ fn install_hooks(s: Shared, ctx: egui::Context) -> Result<(), JsValue> {
         true
     });
     set(&obj, "showAbout", f.as_ref())?;
+    f.forget();
+
+    let (a, c) = (s.clone(), ctx.clone());
+    let f = Closure::<dyn Fn(bool) -> bool>::new(move |on: bool| {
+        with(&a, |app| app.set_more_copy(on));
+        c.request_repaint();
+        on
+    });
+    set(&obj, "showMoreCopy", f.as_ref())?;
     f.forget();
 
     let (a, c) = (s.clone(), ctx.clone());

@@ -1,6 +1,6 @@
 [package]
 name = "equashion-web"
-description = "equaSHion on the web: the equation editor with Copy as LaTeX, Word, text, image and SVG, in one eframe web app (WebGL2 via glow)"
+description = "equaSHion on the web: the equation editor with Copy as LaTeX, MathML, OMML, text, image and SVG, in one eframe web app (WebGL2 via glow)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
