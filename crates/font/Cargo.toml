@@ -1,0 +1,16 @@
+[package]
+name = "equashion-font"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "equaSHion fonts: font database (bundled OFL + optional system fonts), metrics, glyph outlines, shaping"
+
+[lints]
+workspace = true
+
+[dependencies]
+kurbo = { workspace = true }
+skrifa = { workspace = true }
+harfrust = { workspace = true }
+unicode-bidi = { workspace = true }
+log = { workspace = true }
