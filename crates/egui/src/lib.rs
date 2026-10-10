@@ -111,6 +111,8 @@ pub struct EquationEditor {
     canvas_height: f32,
     show_palette: bool,
     show_linear: bool,
+    /// The idle caret blinks (off for hosts that honour reduced motion).
+    caret_blink: bool,
     ed: Editor,
     /// Text of the linear field.
     linear: String,
@@ -166,6 +168,7 @@ impl EquationEditor {
             canvas_height: DEFAULT_CANVAS_HEIGHT,
             show_palette: true,
             show_linear: true,
+            caret_blink: true,
             ed: Editor::new(Math::default()),
             linear: String::new(),
             initial: Math::default(),
@@ -244,6 +247,18 @@ impl EquationEditor {
     pub fn show_linear_field(mut self, on: bool) -> Self {
         self.show_linear = on;
         self
+    }
+
+    /// Blink the caret while idle (default on). Off keeps it solid, for hosts that honour
+    /// a reduced-motion preference.
+    pub fn caret_blink(mut self, on: bool) -> Self {
+        self.caret_blink = on;
+        self
+    }
+
+    /// [`EquationEditor::caret_blink`] on an existing editor.
+    pub fn set_caret_blink(&mut self, on: bool) {
+        self.caret_blink = on;
     }
 
     /// Take the keyboard in the first frames after creation (default on).
@@ -583,7 +598,9 @@ impl EquationEditor {
         let accent = v.selection.stroke.color;
         let ink = v.strong_text_color();
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 3.0, v.extreme_bg_color);
+        // The host's control corner radius, so the canvas matches its other inputs.
+        let corner = v.widgets.inactive.corner_radius;
+        painter.rect_filled(rect, corner, v.extreme_bg_color);
         let to_screen = |r: equashion_layout::Rect| {
             egui::Rect::from_min_max(
                 pos2(origin.x + r.x0 as f32 * k, origin.y + r.y0 as f32 * k),
@@ -618,7 +635,7 @@ impl EquationEditor {
         }
         // The caret: solid while editing, blinking when idle.
         if focused {
-            let on = now - self.touched < BLINK || (((now - self.touched) / BLINK) as u64).is_multiple_of(2);
+            let on = !self.caret_blink || now - self.touched < BLINK || (((now - self.touched) / BLINK) as u64).is_multiple_of(2);
             if on && let Some(r) = cv.layout.caret_rect(self.ed.caret()) {
                 let mut r = to_screen(r);
                 // Keep the caret off a radical's bar or a bracket at the start of a place.
@@ -627,12 +644,14 @@ impl EquationEditor {
                 }
                 painter.line_segment([pos2(r.min.x, r.min.y), pos2(r.min.x, r.max.y)], egui::Stroke::new(1.6, accent));
             }
-            ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
+            if self.caret_blink {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
+            }
         } else {
             painter.text(pos2(rect.max.x - 8.0, rect.min.y + 6.0), egui::Align2::RIGHT_TOP, "Click here to type", FontId::proportional(11.0), dim);
         }
         let stroke = if focused { egui::Stroke::new(2.0, accent) } else { egui::Stroke::new(1.0, v.widgets.noninteractive.bg_stroke.color) };
-        painter.rect_stroke(rect, 3.0, stroke, egui::StrokeKind::Inside);
+        painter.rect_stroke(rect, corner, stroke, egui::StrokeKind::Inside);
         resp
     }
 

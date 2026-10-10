@@ -16,6 +16,8 @@ list (author, source, license) is in ATTRIBUTION.md.
 
 - Source Serif 4 (assets/fonts/SourceSerif4-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-SourceSerif4.txt.
 - Inter (assets/fonts/Inter-Regular.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-Inter.txt.
+- Geist and Geist Mono (assets/fonts/Geist-Regular.ttf, Geist-SemiBold.ttf, GeistMono-Regular.ttf),
+  used by the web showcase interface only — SIL Open Font License 1.1. See assets/fonts/OFL-Geist.txt.
 - STIX Two Math (assets/fonts/STIXTwoMath-Regular.otf) — SIL Open Font License 1.1. See assets/fonts/OFL-STIXTwoMath.txt.
 
 Rust dependencies (vello_cpu, skrifa, harfrust, kurbo, quick-xml, serde, …) are permissively

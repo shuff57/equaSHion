@@ -8,9 +8,12 @@
 //! | `setLinear(s)` | loads `s` into the editor; returns `linear()` |
 //! | `selftest()` | `{ok, total, failures: [{id, reason}], missingGlyphs}` (runs it now) |
 //! | `galleryCount()` | number of gallery cards |
-//! | `activeTab()` | `editor`, `gallery`, `omml` or `selftest` |
+//! | `activeTab()` | `editor`, `gallery`, `omml`, `selftest` or `about` |
 //! | `setTab(name)` | switches tab; true when `name` is a tab |
 //! | `unknownCommands()` | array of the linear field's unknown backslash commands |
+//! | `theme()` | the theme in effect: `light` or `dark` |
+//! | `themePreference()` | `system`, `light` or `dark` |
+//! | `setTheme(name)` | `system`, `light` or `dark`; true when `name` is one of them |
 //! | `ready` | `true` once the hooks are installed |
 //!
 //! The app state is shared with the hooks through `Rc<RefCell<..>>`: JavaScript calls run
@@ -23,6 +26,7 @@ use js_sys::{Array, Object, Reflect};
 use wasm_bindgen::JsCast as _;
 use wasm_bindgen::prelude::*;
 
+use crate::theme::{ThemePref, theme_name};
 use crate::{Showcase, Tab};
 
 const CANVAS_ID: &str = "equashion_canvas";
@@ -47,7 +51,10 @@ pub fn start() {
                 canvas,
                 eframe::WebOptions::default(),
                 Box::new(|cc| {
-                    let shared: Shared = Rc::new(RefCell::new(Showcase::new()));
+                    let mut app = Showcase::new();
+                    app.set_reduced_motion(prefers_reduced_motion());
+                    app.install(&cc.egui_ctx);
+                    let shared: Shared = Rc::new(RefCell::new(app));
                     if let Err(e) = install_hooks(shared.clone(), cc.egui_ctx.clone()) {
                         log::error!("equashion: could not install window.equashion: {e:?}");
                     }
@@ -70,12 +77,15 @@ struct WebApp {
 
 impl eframe::App for WebApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ui, |ui| {
-            if let Ok(mut s) = self.shared.try_borrow_mut() {
-                s.ui(ui);
-            }
-        });
+        if let Ok(mut s) = self.shared.try_borrow_mut() {
+            s.ui(ui);
+        }
     }
+}
+
+/// `prefers-reduced-motion: reduce` is set in the browser.
+fn prefers_reduced_motion() -> bool {
+    web_sys::window().and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok().flatten()).is_some_and(|m| m.matches())
 }
 
 fn set(obj: &Object, name: &str, v: &JsValue) -> Result<(), JsValue> {
@@ -132,7 +142,7 @@ fn install_hooks(s: Shared, ctx: egui::Context) -> Result<(), JsValue> {
     set(&obj, "activeTab", f.as_ref())?;
     f.forget();
 
-    let (a, c) = (s.clone(), ctx);
+    let (a, c) = (s.clone(), ctx.clone());
     let f = Closure::<dyn Fn(String) -> bool>::new(move |name: String| {
         let ok = with(&a, |app| match Tab::parse(&name) {
             Some(t) => {
@@ -145,6 +155,31 @@ fn install_hooks(s: Shared, ctx: egui::Context) -> Result<(), JsValue> {
         ok
     });
     set(&obj, "setTab", f.as_ref())?;
+    f.forget();
+
+    let (a, c) = (s.clone(), ctx.clone());
+    let f = Closure::<dyn Fn() -> String>::new(move || with(&a, |app| theme_name(app.effective_theme(&c)).to_string()));
+    set(&obj, "theme", f.as_ref())?;
+    f.forget();
+
+    let a = s.clone();
+    let f = Closure::<dyn Fn() -> String>::new(move || with(&a, |app| app.theme_pref().name().to_string()));
+    set(&obj, "themePreference", f.as_ref())?;
+    f.forget();
+
+    let (a, c) = (s.clone(), ctx.clone());
+    let f = Closure::<dyn Fn(String) -> bool>::new(move |name: String| {
+        let ok = with(&a, |app| match ThemePref::parse(&name) {
+            Some(t) => {
+                app.set_theme_pref(t);
+                true
+            }
+            None => false,
+        });
+        c.request_repaint();
+        ok
+    });
+    set(&obj, "setTheme", f.as_ref())?;
     f.forget();
 
     let a = s;

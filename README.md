@@ -1,5 +1,10 @@
 # equaSHion
 
+A pure-Rust equation editor.
+
+Typing behaviour is modelled on MathLive (cortexjs.io/mathlive). equaSHion is an independent Rust
+implementation, not a port and not affiliated with MathLive; no MathLive code is used.
+
 An equation editor engine in Rust: a math tree with OMML (Word/PowerPoint) import and export
 and a typed linear/LaTeX-like input format, an editing model (caret, selection, templates,
 undo), TeX-style layout into a backend-neutral scene with caret geometry, and renderers for
@@ -18,7 +23,7 @@ and [DIVERGENCE.md](DIVERGENCE.md) for behaviour that now differs from WordCraft
 | `equashion-layout` | `crates/layout` | math, font, kurbo | `layout_equation` -> `EqLayout` (a `Scene` plus caret rectangles and hit testing), `layout_math_wrapped`, `LayoutCache`, the `MathFonts` trait |
 | `equashion-render` | `crates/render` | layout, vello_cpu | `render_scene` / `render_eq` to premultiplied RGBA, `scene_to_svg` |
 | `equashion-egui` | `crates/egui` | math, layout, render, egui | `EquationEditor`: the equation editor as an egui widget (palette, canvas with caret, linear field), no host types |
-| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web showcase: Editor, Gallery, OMML and Selftest tabs, `window.equashion` test hooks |
+| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web showcase: Editor, Gallery, OMML, Selftest and About tabs, light and dark themes, `window.equashion` test hooks |
 | `xtask` | `xtask` | std | `cargo xtask check`, `bless`, `web`, `serve`, `smoke` |
 
 ```rust
@@ -49,7 +54,7 @@ if r.cancelled { editor.revert(); /* Esc (confirmed when there were changes) */ 
 | Item | What it is |
 |---|---|
 | `EquationEditor::new()`, `with_linear(&str)`, `with_omml(&str)` | Construct (OMML import never fails, so `with_omml` returns `Self`) |
-| `.id_salt(h)`, `.fonts(Arc<FontDb>)`, `.family(&str)`, `.font_size(pt)`, `.canvas_height(pt)`, `.show_palette(bool)`, `.show_linear_field(bool)`, `.auto_focus(bool)` | Builder options |
+| `.id_salt(h)`, `.fonts(Arc<FontDb>)`, `.family(&str)`, `.font_size(pt)`, `.canvas_height(pt)`, `.show_palette(bool)`, `.show_linear_field(bool)`, `.auto_focus(bool)`, `.caret_blink(bool)` | Builder options (`set_caret_blink` on an existing editor, for reduced motion) |
 | `show(&mut self, &mut Ui) -> EditorResponse` | Draw palette, canvas, linear field and message line |
 | `EditorResponse { changed, committed, cancelled, response, rect }` | `response` is the canvas, `rect` the whole widget |
 | `linear()`, `omml()`, `math()`, `unknown_commands()` | Read the equation |
@@ -67,7 +72,8 @@ the caret, a drag or Shift+click selects, also across rows.
 Shared-context rules the widget keeps (pinned by `crates/egui/tests/shared_context.rs`): it never
 calls `set_fonts`, `set_visuals` or `set_style`; it uses only `FontId::proportional` /
 `FontId::monospace`; equation and palette glyphs are rasterised by `equashion-render` and drawn
-as textures tinted with `ui.visuals()` colours (works in light and dark); texture names start
+as textures tinted with `ui.visuals()` colours (works in light and dark; the canvas also takes the
+host's control corner radius); texture names start
 with `equashion/`; it reads keys only while its canvas has focus and never takes focus from
 another widget.
 
@@ -82,14 +88,33 @@ The example shows the widget with live linear and OMML readouts.
 
 One eframe app compiled to wasm (WebGL2 through glow, no wgpu, no JavaScript framework):
 
-- **Editor**: the `EquationEditor` widget, `linear()` and `omml()` readouts with Copy buttons,
-  and the unknown backslash commands.
-- **Gallery**: every row of `corpus/equations.tsv` rendered by equashion-render (long ones wrap,
-  very wide ones take two columns); click a card to edit it.
-- **OMML**: paste OMML or pick a `corpus/omml/` sample; shows the normalised OMML and whether
-  the round trip is idempotent.
-- **Selftest**: parse -> layout -> render (and an OMML round trip) over the whole corpus, pass /
-  fail per item, missing glyphs counted.
+![The Editor tab in the light theme](docs/editor-light.png)
+![The Editor tab in the dark theme](docs/editor-dark.png)
+
+- **Editor**: the `EquationEditor` widget with its palette, and beside it the `linear()` and
+  `omml()` readouts with Copy buttons and the unknown backslash commands (one column below
+  800 px).
+- **Gallery**: every row of `corpus/equations.tsv` rendered by equashion-render, grouped under six
+  headings (fractions and roots, scripts and symbols, operators and limits, brackets and
+  matrices, accents and braces, physics and long forms), on an equal-width card grid; very
+  wide equations take two columns. Select a card to edit it.
+- **OMML**: paste OMML or pick a `corpus/omml/` sample; shows the normalised OMML and a worded
+  badge: round trip stable, round trip changed, no equation found, or no input.
+- **Selftest**: parse -> layout -> render (and an OMML round trip) over the whole corpus, a
+  summary line and a table per item, missing glyphs counted.
+- **About**: what it is, the crate map, credits and licence, known limits.
+
+The header has a System / Light / Dark theme toggle; System follows `prefers-color-scheme`.
+`prefers-reduced-motion` turns egui's hover animations and the caret blink off. The footer of
+every tab carries the MathLive credit above.
+
+Design tokens (`apps/equashion-web/src/theme.rs`, where every value is listed): one accent,
+`#2b62a3` light / `#7aaee6` dark (the same blue, saturation under 80%), on a zinc neutral ramp
+(page `#f6f6f7` / `#141416`, text `#2a2a30` / `#dcdce1`); every text colour meets WCAG AA in
+both themes (unit-tested). Radii: 6 px for controls, 10 px for panels and cards. Spacing: 4, 8,
+12, 16, 24, 32. Type: Geist (UI) and Geist Mono (code), display 22, h2 16, body 14, caption 12,
+mono 13, loaded with `FontDefinitions` by the web app only; equations stay in Source Serif 4
+with STIX Two Math.
 
 ```sh
 cargo xtask web     # trunk build --release in apps/equashion-web -> dist/ (prints wasm size)
@@ -101,10 +126,13 @@ Needs `trunk` (0.21) and the `wasm32-unknown-unknown` target; `wasm-bindgen` is 
 `=0.2.128` to match the installed `wasm-bindgen` CLI. The canvas is opaque to the DOM, so the
 page exposes test hooks on `window.equashion`: `linear()`, `omml()`, `setLinear(s)`,
 `selftest()` (`{ok, total, failures: [{id, reason}], missingGlyphs}`), `galleryCount()`,
-`activeTab()`, `setTab(name)`, `unknownCommands()` and `ready`. The smoke test uses its own
-playwright-cli session (`equashion`), asserts the hooks, saves screenshots of every tab to
-`tests/browser/out/` (gitignored) and fails if one is blank (`tests/browser/check_png.py`).
-The showcase itself is plain egui and is also tested natively with egui_kittest
+`activeTab()`, `setTab(name)` (`editor`, `gallery`, `omml`, `selftest`, `about`),
+`unknownCommands()`, `theme()` (`light` or `dark`, the theme in effect),
+`themePreference()`, `setTheme(name)` (`system`, `light` or `dark`) and `ready`. The smoke test
+uses its own playwright-cli session (`equashion`), asserts the hooks, saves screenshots of every
+tab in both themes, and of three tabs at 700 px wide, to `tests/browser/out/` (gitignored), and
+fails if one is blank or has the wrong theme's brightness (`tests/browser/check_png.py`). The
+showcase itself is plain egui and is also tested natively with egui_kittest
 (`apps/equashion-web/tests/showcase.rs`).
 
 ## Checks
@@ -127,5 +155,15 @@ the canvas.
 ## Licence
 
 MIT OR Apache-2.0, as WordCraft. See [LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)
-and [NOTICE](NOTICE). The bundled fonts are under the SIL Open Font License 1.1
+and [NOTICE](NOTICE). The bundled fonts (Source Serif 4, Inter, STIX Two Math, and Geist and
+Geist Mono for the web showcase's interface) are under the SIL Open Font License 1.1
 ([ATTRIBUTION.md](ATTRIBUTION.md)).
+
+## Credits
+
+- Interaction model: MathLive (cortexjs.io/mathlive). Typing behaviour is modelled on MathLive.
+  equaSHion is an independent Rust implementation, not a port and not affiliated with MathLive;
+  no MathLive code is used.
+- Engine code: the equation editor of WordCraft (github.com/storytold/wordcraft) and three
+  edit-model tests from DeckCraft (github.com/storytold/deckcraft), taken from the shuff57 forks;
+  see [PROVENANCE.md](PROVENANCE.md).

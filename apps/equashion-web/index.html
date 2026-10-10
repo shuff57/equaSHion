@@ -6,11 +6,12 @@
   <title>equaSHion</title>
   <link data-trunk rel="rust" data-bin="equashion-web" data-wasm-opt="z" />
   <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #1b1b1b; }
-    @media (prefers-color-scheme: light) { html, body { background: #f8f8f8; } }
+    /* Page colours before the first frame: the showcase's bg tokens (src/theme.rs). */
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f6f6f7; color: #5c5c66; }
+    @media (prefers-color-scheme: dark) { html, body { background: #141416; color: #a3a3ad; } }
     #equashion_canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
     #equashion_loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      color: #888; font: 14px system-ui, sans-serif; pointer-events: none; }
+      font: 14px system-ui, sans-serif; pointer-events: none; }
   </style>
 </head>
 <body>

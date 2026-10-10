@@ -175,7 +175,8 @@ Written for this repository. Packaging follows WordCraft `dbfe1b1` `apps/wordcra
 handling of `src/web.rs`, read with `git archive`). Changed from that reference: eframe's
 `glow` renderer (WebGL2) instead of `wgpu` (WebGPU with a WebGL2 fallback), no `rfd`, file
 drop or `Services`; `wasm-bindgen` pinned to `=0.2.128`; output to the workspace `dist/`;
-the `window.equashion` hooks are new.
+the `window.equashion` hooks are new. The look (`src/theme.rs`: colour tokens, light and dark
+themes, Geist fonts) and the About tab are new and were not taken from WordCraft.
 
 ### Corpus, goldens, xtask (new)
 

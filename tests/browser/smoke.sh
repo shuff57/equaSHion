@@ -46,17 +46,33 @@ check "selftest().ok" "(() => { const s = eq.selftest(); return s.ok === true ||
 check "galleryCount() === $ROWS" "eq.galleryCount() === $ROWS || eq.galleryCount()"
 check "unknownCommands()" "(() => { eq.setLinear('\\\\foo+x'); const u = eq.unknownCommands(); eq.setLinear('\\\\frac{a}{b}'); return (Array.isArray(u) && u.some(c => c.includes('foo'))) || u; })()"
 
+check "theme hooks" "(() => { const p = eq.themePreference(); const t = eq.theme(); return (p === 'system' && (t === 'light' || t === 'dark')) || [p, t]; })()"
+check "setTheme rejects an unknown name" "eq.setTheme('sepia') === false && eq.themePreference() === 'system' || eq.themePreference()"
+
+# shot TAB THEME [WIDTH]: switch, wait for egui to paint, save tests/browser/out/TAB-THEME[-WIDTH].png and
+# check it is not blank and has the theme's overall brightness.
 shot() {
-    local tab="$1"
+    local tab="$1" theme="$2" name="$1-$2${3:+-$3}"
+    check "setTheme($theme)" "eq.setTheme('$theme') && eq.theme() === '$theme' && eq.themePreference() === '$theme' || eq.theme()"
     check "setTab($tab)" "eq.setTab('$tab') && eq.activeTab() === '$tab'"
-    # Two animation frames so egui paints the new tab before the capture.
-    pw --raw eval "async () => { for (let i = 0; i < 6; i++) await new Promise(r => requestAnimationFrame(r)); return true; }" >/dev/null
-    pw screenshot --filename "$OUT/$tab.png" >/dev/null
-    python3 -I "$HERE/check_png.py" "$OUT/$tab.png" || fail "$tab screenshot looks blank"
+    # A few animation frames so egui paints the new tab and theme before the capture.
+    pw --raw eval "async () => { for (let i = 0; i < 8; i++) await new Promise(r => requestAnimationFrame(r)); return true; }" >/dev/null
+    pw screenshot --filename "$OUT/$name.png" >/dev/null
+    python3 -I "$HERE/check_png.py" "$OUT/$name.png" "$theme" || fail "$name screenshot looks blank or has the wrong theme"
 }
-shot selftest
-shot gallery
-shot omml
-shot editor
+for theme in light dark; do
+    for tab in selftest gallery omml about editor; do
+        shot "$tab" "$theme"
+    done
+done
+# A narrow window: one column, the header still on one line.
+pw resize 700 900 >/dev/null
+for tab in editor gallery about; do
+    shot "$tab" light 700
+done
+shot editor dark 700
+pw resize 1280 900 >/dev/null
+check "setTheme(system)" "eq.setTheme('system') && eq.themePreference() === 'system' || eq.themePreference()"
+check "galleryCount() unchanged" "eq.galleryCount() === $ROWS || eq.galleryCount()"
 check "back on editor with a fraction" "eq.activeTab() === 'editor' && eq.linear().length > 0"
 echo "smoke: passed (screenshots in $OUT)"

@@ -1,7 +1,9 @@
 """Fail when a PNG screenshot is blank: too small, one flat colour, or almost no contrast.
 
 Standard library only (zlib), 8-bit RGB / RGBA PNGs as Chromium writes them.
-usage: python3 -I check_png.py shot.png
+usage: python3 -I check_png.py shot.png [light|dark]
+With a theme, also fail when the mean luminance does not match it (light: mean > 160,
+dark: mean < 80), so a screenshot of the wrong theme is caught.
 """
 import struct
 import sys
@@ -51,7 +53,8 @@ def decode(path):
 def main():
     path = sys.argv[1]
     w, h, bpp, rows = decode(path)
-    colours, lum_min, lum_max = set(), 255, 0
+    expect = sys.argv[2] if len(sys.argv) > 2 else None
+    colours, lum_min, lum_max, lum_sum, n = set(), 255, 0, 0, 0
     for y in range(0, h, 2):
         line = rows[y]
         for x in range(0, w, 2):
@@ -59,9 +62,14 @@ def main():
             colours.add((r, g, b))
             lum = (r * 299 + g * 587 + b * 114) // 1000
             lum_min, lum_max = min(lum_min, lum), max(lum_max, lum)
-    print(f"check_png: {path}: {w}x{h}, {len(colours)} colours, luminance {lum_min}..{lum_max}")
+            lum_sum, n = lum_sum + lum, n + 1
+    mean = lum_sum // max(n, 1)
+    print(f"check_png: {path}: {w}x{h}, {len(colours)} colours, luminance {lum_min}..{lum_max}, mean {mean}")
     if w < 200 or h < 200 or len(colours) < 16 or lum_max - lum_min < 80:
         print("check_png: looks blank", file=sys.stderr)
+        sys.exit(1)
+    if (expect == "light" and mean <= 160) or (expect == "dark" and mean >= 80):
+        print(f"check_png: expected a {expect} page, mean luminance is {mean}", file=sys.stderr)
         sys.exit(1)
 
 
