@@ -23,7 +23,7 @@ and [DIVERGENCE.md](DIVERGENCE.md) for behaviour that now differs from WordCraft
 | `equashion-layout` | `crates/layout` | math, font, kurbo | `layout_equation` -> `EqLayout` (a `Scene` plus caret rectangles and hit testing), `layout_math_wrapped`, `LayoutCache`, the `MathFonts` trait |
 | `equashion-render` | `crates/render` | layout, vello_cpu | `render_scene` / `render_eq` to premultiplied RGBA, `scene_to_svg` |
 | `equashion-egui` | `crates/egui` | math, layout, render, egui | `EquationEditor`: the equation editor as an egui widget (palette, canvas with caret, linear field), no host types |
-| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web showcase: Editor, Gallery, OMML, Selftest and About tabs, light and dark themes, `window.equashion` test hooks |
+| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web page: the editor with a symbol palette, Copy as LaTeX / Word / text / image / SVG, paste-in, examples, light and dark themes, `window.equashion` test hooks |
 | `xtask` | `xtask` | std | `cargo xtask check`, `bless`, `web`, `serve`, `smoke` |
 
 ```rust
@@ -84,37 +84,77 @@ cargo run -p equashion-egui --example widget -- --light # light theme
 
 The example shows the widget with live linear and OMML readouts.
 
-## The web showcase
+## The web page
 
-One eframe app compiled to wasm (WebGL2 through glow, no wgpu, no JavaScript framework):
+One eframe app compiled to wasm (WebGL2 through glow, no wgpu, no JavaScript framework). It is a
+tool: type an equation, copy it out.
 
-![The Editor tab in the light theme](docs/editor-light.png)
-![The Editor tab in the dark theme](docs/editor-dark.png)
+![The page in the light theme](docs/editor-light.png)
+![The page in the dark theme](docs/editor-dark.png)
 
-- **Editor**: the `EquationEditor` widget with its palette, and beside it the `linear()` and
-  `omml()` readouts with Copy buttons and the unknown backslash commands (one column below
-  800 px).
-- **Gallery**: every row of `corpus/equations.tsv` rendered by equashion-render, grouped under six
-  headings (fractions and roots, scripts and symbols, operators and limits, brackets and
-  matrices, accents and braces, physics and long forms), on an equal-width card grid; very
-  wide equations take two columns. Select a card to edit it.
-- **OMML**: paste OMML or pick a `corpus/omml/` sample; shows the normalised OMML and a worded
-  badge: round trip stable, round trip changed, no equation found, or no input.
-- **Selftest**: parse -> layout -> render (and an OMML round trip) over the whole corpus, a
-  summary line and a table per item, missing glyphs counted.
-- **About**: what it is, the crate map, credits and licence, known limits.
+One centred column, top to bottom:
 
-The header has a System / Light / Dark theme toggle; System follows `prefers-color-scheme`.
-`prefers-reduced-motion` turns egui's hover animations and the caret blink off. The footer of
-every tab carries the MathLive credit above.
+- **Header**: the wordmark, the tagline and a System / Light / Dark theme toggle (System follows
+  `prefers-color-scheme`).
+- **Editor**: a symbol palette in labelled groups (Structures, Greek, Operators, Relations; Arrows,
+  Brackets, Accents, Functions and the rest behind **More symbols**), then the `EquationEditor`
+  canvas. Every palette face is rendered by equashion-render, not by egui's fonts. A long
+  equation shrinks to half size and then scrolls sideways to keep the caret in view.
+- **Copy row** under the canvas, and the current LaTeX in a read-only line you can select.
+- **Paste LaTeX or OMML** (a disclosure): a field and a Load button that replaces the equation.
+- **Try it**: ten examples from `corpus/equations.tsv`, and **How to type**, a short cheat sheet
+  (each line is checked against the editor in `apps/equashion-web/tests/showcase.rs`).
+- **Footer**: the MathLive credit and **About and licences**, which opens a panel with what it
+  is, credits, the licence and known limits.
+
+### What each Copy button puts on the clipboard
+
+| Button | MIME types | Content | Pastes into |
+|---|---|---|---|
+| Copy LaTeX | `text/plain` | `to_latex` (`x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}`) | Overleaf, Markdown with math, Anki, any LaTeX editor; MathLive and other LaTeX-aware editors |
+| Copy for Word | `text/plain`, `text/html` | plain: OMML, an `m:oMath` element with its namespace declared. HTML: the same OMML inside the `<!--[if gte msEquation 12]>` conditional comment Word itself writes on its clipboard, and a PNG `<img>` (black on white) in the branch other programs read | Meant for Word, PowerPoint and Outlook on the desktop. **Not verified in Word**: no Office install was available when this was built. Programs that ignore the conditional comment (Google Docs, LibreOffice, mail clients) get the picture from the HTML, or the raw OMML text where they only take plain text |
+| Copy text | `text/plain` | `to_linear` (`x=(−b±√(b^2−4ac))/2a`) | anywhere; the linear form also pastes back into this page |
+| Copy image | `image/png` | black ink on white at 2 pixels per point, 20 pt equation size, tagged 144 dpi | Word, PowerPoint, Google Docs, chat apps, image editors |
+| Download SVG | (a file, `image/svg+xml`) | `equation.svg` from equashion-render's SVG backend, black ink, glyphs as paths | Inkscape, Illustrator, browsers, Word and PowerPoint (Insert Picture) |
+
+How the browser writes it (`apps/equashion-web/index.html`): text kinds go through a `copy`
+event started with `document.execCommand('copy')` inside the click, which writes every type
+exactly as given; if that is refused, `navigator.clipboard.writeText` or `navigator.clipboard.write`
+with a `ClipboardItem`. The image always uses `navigator.clipboard.write` with an `image/png`
+`ClipboardItem`. Known browser limits:
+
+- The Clipboard API only exists on HTTPS pages and `localhost` / `127.0.0.1`. Served over plain
+  HTTP elsewhere, every Copy falls back.
+- `navigator.clipboard.write` with `text/html` may be sanitised by Chromium (which can drop the
+  conditional comment); that is why text goes through the `copy` event first.
+- Image copy needs `ClipboardItem` with `image/png`: Chromium and Edge, Firefox 127 and later,
+  Safari 13.1 and later. Safari may refuse it here because the write starts in the next
+  animation frame rather than directly in the click handler.
+- When the browser refuses, the page shows the text selected in a field to copy with Ctrl+C
+  (Cmd+C on a Mac); for the image it offers a PNG download instead.
+
+### Paste in
+
+Ctrl+V (Cmd+V) in the canvas reads the clipboard text as OMML when it starts with `<` and has an
+`<m:oMath` or `<oMath` element, as LaTeX when it has a backslash or a `$` wrapper (`$..$`,
+`$$..$$`, `\(..\)` and `\[..\]` are dropped), and as linear text otherwise, and inserts it at
+the caret (replacing a selection). The Paste LaTeX or OMML field reads the same way but replaces
+the whole equation. Unknown backslash commands are named in one sentence under the canvas.
+Text over 20000 characters, empty text and OMML with no content are refused with a sentence;
+the parsers have depth and size limits, so hostile input does not panic (unit-tested). Copying
+an equation out of Word puts its linear or LaTeX form, not OMML, in the plain-text clipboard,
+so a paste from Word arrives as text.
+
+### Building and testing
+
+`prefers-reduced-motion` turns egui's hover animations and the caret blink off.
 
 Design tokens (`apps/equashion-web/src/theme.rs`, where every value is listed): one accent,
 `#2b62a3` light / `#7aaee6` dark (the same blue, saturation under 80%), on a zinc neutral ramp
 (page `#f6f6f7` / `#141416`, text `#2a2a30` / `#dcdce1`); every text colour meets WCAG AA in
-both themes (unit-tested). Radii: 6 px for controls, 10 px for panels and cards. Spacing: 4, 8,
-12, 16, 24, 32. Type: Geist (UI) and Geist Mono (code), display 22, h2 16, body 14, caption 12,
-mono 13, loaded with `FontDefinitions` by the web app only; equations stay in Source Serif 4
-with STIX Two Math.
+both themes (unit-tested). Radii: 6 px for controls, 10 px for panels. Spacing: 4, 8, 12, 16,
+24, 32. Type: Geist (UI) and Geist Mono (code), loaded with `FontDefinitions` by the web app
+only; equations stay in Source Serif 4 with STIX Two Math.
 
 ```sh
 cargo xtask web     # trunk build --release in apps/equashion-web -> dist/ (prints wasm size)
@@ -124,16 +164,24 @@ cargo xtask smoke   # serve dist/ and run tests/browser/smoke.sh (playwright-cli
 
 Needs `trunk` (0.21) and the `wasm32-unknown-unknown` target; `wasm-bindgen` is pinned to
 `=0.2.128` to match the installed `wasm-bindgen` CLI. The canvas is opaque to the DOM, so the
-page exposes test hooks on `window.equashion`: `linear()`, `omml()`, `setLinear(s)`,
-`selftest()` (`{ok, total, failures: [{id, reason}], missingGlyphs}`), `galleryCount()`,
-`activeTab()`, `setTab(name)` (`editor`, `gallery`, `omml`, `selftest`, `about`),
-`unknownCommands()`, `theme()` (`light` or `dark`, the theme in effect),
-`themePreference()`, `setTheme(name)` (`system`, `light` or `dark`) and `ready`. The smoke test
-uses its own playwright-cli session (`equashion`), asserts the hooks, saves screenshots of every
-tab in both themes, and of three tabs at 700 px wide, to `tests/browser/out/` (gitignored), and
-fails if one is blank or has the wrong theme's brightness (`tests/browser/check_png.py`). The
-showcase itself is plain egui and is also tested natively with egui_kittest
-(`apps/equashion-web/tests/showcase.rs`).
+page exposes test hooks on `window.equashion` (the full table is at the top of
+`apps/equashion-web/src/web.rs`): `linear()`, `omml()`, `latex()`, `setLinear(s)`,
+`setLatex(s)`, `paste(s)`, `copy(kind)` (`latex`, `word`, `text`, `image`, `svg`; a Promise of
+`{kind, status, items}` with each MIME type's data), `copyStatus()`, `copyButtonRect(kind)`,
+`examples()`, `loadExample(idOrName)`, `selftest()`, `galleryCount()`, `activeTab()` (always
+`editor`), `setTab(name)` (accepted and ignored), `showAbout(on)`,
+`setDisclosures(more, paste, howto)`, `unknownCommands()`, `theme()`, `themePreference()`,
+`setTheme(name)` and `ready`.
+
+The smoke test uses its own playwright-cli session (`equashion`). It checks the hooks and every
+Copy payload (OMML with `m:f` for a fraction, PNG magic bytes, an `<svg` document), clicks Copy
+LaTeX and Copy for Word for real and records what the page hands the clipboard, dispatches
+real paste events with OMML, LaTeX and linear text, loads every example, and saves screenshots
+in both themes at 1280 and 700 px wide (closed, and with every disclosure and About open) to
+`tests/browser/out/` (gitignored), failing if one is blank or has the wrong theme's brightness
+(`tests/browser/check_png.py`). The page is plain egui and is also tested natively with
+egui_kittest (`apps/equashion-web/tests/showcase.rs`). The corpus selftest still runs through
+the `selftest()` hook, though it is no longer on the page.
 
 ## Checks
 
@@ -150,13 +198,14 @@ the canvas.
 
 ## Not built yet
 
-- PNG/JPEG encoding of rendered pixels (WordCraft's used the `image` crate; not carried over).
+- JPEG export. (The web page encodes PNG with the `png` crate; the library crates still return
+  raw RGBA.)
 
 ## Licence
 
 MIT OR Apache-2.0, as WordCraft. See [LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)
 and [NOTICE](NOTICE). The bundled fonts (Source Serif 4, Inter, STIX Two Math, and Geist and
-Geist Mono for the web showcase's interface) are under the SIL Open Font License 1.1
+Geist Mono for the web page's interface) are under the SIL Open Font License 1.1
 ([ATTRIBUTION.md](ATTRIBUTION.md)).
 
 ## Credits

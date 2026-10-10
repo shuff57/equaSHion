@@ -1,6 +1,6 @@
 [package]
 name = "equashion-web"
-description = "equaSHion web showcase: the equation editor widget, a corpus gallery, an OMML round-trip page and a selftest, in one eframe web app (WebGL2 via glow)"
+description = "equaSHion on the web: the equation editor with Copy as LaTeX, Word, text, image and SVG, in one eframe web app (WebGL2 via glow)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -18,6 +18,7 @@ equashion-math = { workspace = true }
 equashion-layout = { workspace = true, features = ["extra-fonts"] }
 equashion-render = { workspace = true, features = ["raster", "extra-fonts"] }
 equashion-egui = { workspace = true }
+png = "0.18"
 egui = { workspace = true }
 log = { workspace = true }
 
