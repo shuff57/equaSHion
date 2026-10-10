@@ -15,7 +15,8 @@ commands:
 ";
 
 /// Crates that must build for `wasm32-unknown-unknown` (the web page comes next).
-const WASM_CRATES: &[(&str, &str)] = &[("equashion-layout", "crates/layout"), ("equashion-render", "crates/render")];
+const WASM_CRATES: &[(&str, &str)] =
+    &[("equashion-layout", "crates/layout"), ("equashion-render", "crates/render"), ("equashion-egui", "crates/egui")];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

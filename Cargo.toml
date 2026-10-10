@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/math", "crates/font", "crates/layout", "crates/render", "xtask"]
+members = ["crates/math", "crates/font", "crates/layout", "crates/render", "crates/egui", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -17,6 +17,7 @@ equashion-math = { path = "crates/math" }
 equashion-font = { path = "crates/font" }
 equashion-layout = { path = "crates/layout" }
 equashion-render = { path = "crates/render" }
+equashion-egui = { path = "crates/egui" }
 
 # foundation
 kurbo = { version = "0.13", features = ["serde"] }
@@ -31,7 +32,7 @@ harfrust = "0.13"
 vello_cpu = "0.2"
 quick-xml = "0.38"
 
-# ui (reserved for equashion-egui; not used yet)
+# ui
 egui = "0.36"
 eframe = { version = "0.36", default-features = false }
 egui_kittest = "0.36"

@@ -110,6 +110,61 @@ single-threaded (`num_threads: 0`, as `render_eq` did) without its `multithreadi
 Added: `render_scene` (any scene, optional background), `glyph_transform`, and an SVG backend
 (`scene_to_svg`, `fmt2`) that draws the same primitives with the same transforms.
 
+### equashion-egui (`crates/egui`) <- WordCraft `crates/ui-egui/src/eqdialog.rs`
+
+Imported with `git -C ~/wordcraft archive dbfe1b1 crates/ui-egui/src/eqdialog.rs`; DeckCraft's
+`7972cf5:crates/ui-egui/src/eqdialog.rs` was read for comparison only. WordCraft's dialog
+already had DeckCraft's Ctrl+Z/Y, Ctrl+C/X (via egui `Copy`/`Cut` events), Tab between places
+and Esc-asks-before-discarding, so no DeckCraft code was taken.
+
+Taken (into `src/lib.rs` and `src/palette.rs`): the canvas (layout, shrink-to-fit and caret
+scrolling, active-place tint, selection, caret blink, placeholder text), the input mapping
+(`handle_input`), mouse placement, drag and shift-click selection, the palette tabs, groups,
+symbol sets and button faces (`glyph` -> `palette::label`), the linear field and display
+checkbox, the Esc discard logic.
+
+Changed:
+- No host types: `WordApp`, `Session`, `app.run("insert.equation" / "equation.update")`,
+  `sync_live`, `finish`, `wordcraft_doc::{Pos, Path}`, `serde_json` targets, Track Changes, the
+  Insert / Update / Cancel buttons and `tl!` are gone. The host reads `EditorResponse
+  { changed, committed, cancelled }` and the equation (`linear()`, `omml()`, `math()`).
+- `theme::*` (`Tokens`, `theme::regular`, `theme::semibold`, `APP_COLOR`) -> `ui.visuals()`
+  colours and `FontId::proportional` / `FontId::monospace`. `theme::semibold` was a
+  `FontFamily::Name`, which panics on a context that never registered it.
+- Palette buttons were egui text buttons (the symbols came from the host's egui fonts); they
+  are now custom buttons whose faces are small equations laid out and rasterised by
+  equashion-render (structures show their empty places as boxes), tinted with the visuals'
+  text colour, with the old face text as their accessible label. They are clickable but not
+  focusable.
+- The canvas was a white texture with dark ink; the ink is now rendered white on transparent
+  and tinted with `visuals.strong_text_color()` on `visuals.extreme_bg_color`.
+- Ids: `Id::new("eq-canvas")` / `"eq-linear"` -> derived from a per-widget `Id`; the texture
+  name `"equation-canvas"` -> `equashion/editor/<id>/canvas`, palette textures
+  `equashion/palette/<key>`. The canvas texture is updated in place instead of reloaded.
+- Focus: WordCraft's canvas took the keyboard back whenever the linear field did not hold it;
+  it now only does so while no widget has focus, and gives up typing once another widget
+  takes focus. Esc is handled only when the canvas or linear field had focus (the canvas keeps
+  focus on Esc via its focus-lock filter).
+- Ctrl+C / Ctrl+X also act on the key event when the platform sent no `Copy` / `Cut` event in
+  that frame (kittest and some backends send only the key).
+- Enter commits and resets the Esc baseline; Enter with a blank equation is reported as a
+  commit (WordCraft refused it with a message); the host decides.
+- Family "Cambria Math" -> `DEFAULT_FAMILY`; canvas width follows the available width.
+
+Tests (`src/tests.rs`, 25): ported from the dialog's 40 kittest tests, the ones that do not
+need the document: typing `x^2`, `_` `/` `sqrt` and Greek names, arrows and Backspace, undo /
+redo, Tab, Esc asks before discarding, shift-arrows plus a palette click wrapping the
+selection, the quadratic formula, typing after a palette click (now also asserting the caret
+and focus), palette structures at the caret, empty places, click placement, shift-click,
+linear field, hostile input, typed LaTeX, `lim_x`. New: Ctrl+C / Ctrl+X, Greek and operator
+tabs, a cross-row drag, typing once under multi-pass frames and with two editors, leaving a
+host text field alone, texture namespacing, the load/revert API. `tests/shared_context.rs`
+runs the widget on a context with and without a host-registered `FontFamily::Name("semibold")`
+and checks that fonts and styles are unchanged, plus a control test showing the named-family
+panic. Not ported (they test the document or the app): insert / update / re-edit, live
+editing in the page, Track Changes, Cancel undoing the live edit, the ribbon command,
+Alt+=, double-click in the page, short-window layout.
+
 ### Corpus, goldens, xtask (new)
 
 - `corpus/equations.tsv`: 44 typed equations written for this repository.
@@ -134,8 +189,7 @@ Added: `render_scene` (any scene, optional background), `glyph_transform`, and a
 ## Not taken
 
 Everything else in WordCraft: the document model, docx/odt/rtf/html/markdown/pdf formats,
-paragraph/table/page layout, the engine, MCP server, the egui app and its equation dialog
-(`crates/ui-egui/src/eqdialog.rs`, to be ported later as `equashion-egui`), the web app,
+paragraph/table/page layout, the engine, MCP server, the egui app (the equation dialog was ported later as `equashion-egui`, see above), the web app,
 packaging, brand assets and docs, Source Sans 3, JetBrains Mono, the hyphenation data.
 
 ## Licence
