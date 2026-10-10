@@ -16,7 +16,19 @@ Every file was read from those commits with
 
 ## What was taken
 
-Filled in phase by phase; see the sections below.
+### equashion-math (`crates/math`) <- WordCraft `crates/math`
+
+Taken whole: `lib.rs`, `edit.rs`, `edit/tests.rs`, `linear.rs`, `omml.rs`, `templates.rs`,
+`tests.rs`, `xml.rs`, `Cargo.toml` (dependencies `serde`, `quick-xml`).
+
+Changed:
+- Package renamed `wordcraft-math` -> `equashion-math`; the crate doc comment no longer names
+  WordCraft.
+- `edit.rs`: DeckCraft's exponent rules (see DIVERGENCE.md).
+- `edit/tests.rs`: three tests appended from DeckCraft `7972cf5`
+  `crates/math/src/edit/tests.rs`: `a_single_digit_exponent_ends_at_the_next_term`,
+  `letters_keep_going_in_an_exponent`, `a_parenthesised_exponent_is_the_group_itself`. Nothing
+  else was taken from DeckCraft.
 
 ## Licence
 
