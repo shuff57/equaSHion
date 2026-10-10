@@ -15,8 +15,10 @@ use skrifa::{GlyphId, MetadataProvider};
 /// The family used when a requested family is unknown: the bundled default equation family.
 pub const FALLBACK_FAMILY: &str = crate::DEFAULT_FAMILY;
 
-/// The bundled fonts (OFL), as font file bytes: Source Serif 4 in its four styles, then Inter
-/// Regular.
+/// The bundled fonts (OFL), as font file bytes: Source Serif 4 in its four styles, Inter
+/// Regular, then STIX Two Math Regular. STIX comes last so that it is only the fallback for
+/// characters the text faces lack (`∇`, `∮`, `⌈⌉⌊⌋`, `⟨⟩`, ...): the fallback order is the
+/// default family first, then load order.
 pub fn bundled() -> &'static [&'static [u8]] {
     BUNDLED
 }
@@ -27,6 +29,7 @@ static BUNDLED: &[&[u8]] = &[
     include_bytes!("../../../assets/fonts/SourceSerif4-Bold.ttf"),
     include_bytes!("../../../assets/fonts/SourceSerif4-BoldIt.ttf"),
     include_bytes!("../../../assets/fonts/Inter-Regular.ttf"),
+    include_bytes!("../../../assets/fonts/STIXTwoMath-Regular.otf"),
 ];
 
 #[derive(Clone)]

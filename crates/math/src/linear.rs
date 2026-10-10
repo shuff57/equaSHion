@@ -109,6 +109,13 @@ const SYMS: &[(&str, &str)] = &[
     ("propto", "∝"),
     ("ll", "≪"),
     ("gg", "≫"),
+    // Bracket commands: kept as text, like a typed `⟨` (the drawn delimiters come from OMML).
+    ("langle", "⟨"),
+    ("rangle", "⟩"),
+    ("lfloor", "⌊"),
+    ("rfloor", "⌋"),
+    ("lceil", "⌈"),
+    ("rceil", "⌉"),
 ];
 
 const ACCENTS: &[(&str, char)] = &[

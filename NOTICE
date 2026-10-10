@@ -16,6 +16,7 @@ list (author, source, license) is in ATTRIBUTION.md.
 
 - Source Serif 4 (assets/fonts/SourceSerif4-*.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-SourceSerif4.txt.
 - Inter (assets/fonts/Inter-Regular.ttf) — SIL Open Font License 1.1. See assets/fonts/OFL-Inter.txt.
+- STIX Two Math (assets/fonts/STIXTwoMath-Regular.otf) — SIL Open Font License 1.1. See assets/fonts/OFL-STIXTwoMath.txt.
 
 Rust dependencies (vello_cpu, skrifa, harfrust, kurbo, quick-xml, serde, …) are permissively
 licensed (MIT/Apache-2.0/BSD/ISC/Zlib) and fetched through crates.io.

@@ -52,13 +52,27 @@ caret in the denominator stuck out of the canvas by about a point. The canvas no
 every caret row. Found by the corpus property test
 (`crates/layout/tests/corpus.rs`), which checks that every caret lies inside the canvas.
 
-## Symbols the bundled fonts lack
+## Symbols the bundled fonts lack: STIX Two Math fallback
 
 WordCraft's `FontDb::global()` loads system fonts for characters its bundled fonts lack.
 `FontDb::bundled_only()` does not, and Source Serif 4 and Inter have no glyph for ∇ (U+2207),
-∮ (U+222E), ⌈ ⌉ ⌊ ⌋ (U+2308–230B) or ⟨ ⟩ (U+27E8, U+27E9). Those draw as .notdef boxes in
-the goldens (`maxwell_*`, `oint`, `floor_ceil`, `angle`). A host using `FontDb::global()` or
-`FontDb::add_font` gets them from the system or the added font. The gap is pinned by
-`characters_the_bundled_fonts_lack_are_known`. The typed-text parser keeps `⟨ ⟩` and the
-floor/ceiling brackets as text (WordCraft does the same), so the drawn angle and floor
+∮ (U+222E), ⌈ ⌉ ⌊ ⌋ (U+2308–230B) or ⟨ ⟩ (U+27E8, U+27E9); these used to draw as .notdef boxes.
+equaSHion now bundles STIX Two Math Regular (OFL, unmodified, 838 KB) after the text faces, so
+`fallback_for` finds it for exactly those characters (the fallback order is the default family
+first, then load order, so nothing Source Serif 4 or Inter covers moves). The `maxwell_*`,
+`oint`, `floor_ceil` and `angle` goldens changed accordingly; no other golden did. Pinned by
+`symbols_the_text_faces_lack_resolve_to_stix_two_math` and `no_corpus_equation_draws_a_missing_glyph`
+(`crates/layout/tests/corpus.rs`), the golden test (no .notdef glyph) and the widget's
+`every_palette_face_is_drawn_from_the_bundled_fonts`.
+
+Visible side effects: ∮ comes from STIX at the big-operator size, so it is heavier than the
+Source Serif ∫ and its limits sit a little lower; ∇ is slightly lighter than the surrounding
+Source Serif glyphs.
+
+## Typed bracket commands
+
+The typed-text parser now knows `\langle`, `\rangle`, `\lfloor`, `\rfloor`, `\lceil` and
+`\rceil` (WordCraft reported them as unknown commands and kept them as literal text). They
+become the characters ⟨ ⟩ ⌊ ⌋ ⌈ ⌉ as text, the same as typing those characters; with `\left` /
+`\right` they are still text (those two are ignored, as before), so the drawn angle and floor
 delimiters of the layout are only reached from OMML.

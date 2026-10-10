@@ -526,3 +526,19 @@ fn set_linear_with_omml_and_revert() {
     assert_eq!(e.linear(), l);
     assert!(EquationEditor::with_linear(r"\foo x").unknown_commands().iter().any(|c| c.contains("foo")));
 }
+
+#[test]
+fn every_palette_face_is_drawn_from_the_bundled_fonts() {
+    use equashion_layout::{DEFAULT_FAMILY, Prim, Rgb, layout_equation};
+    let fonts = bundled_fonts();
+    let mut faces: Vec<(String, equashion_math::Math)> =
+        equashion_math::templates().into_iter().map(|t| (t.id.to_string(), equashion_math::Editor::new(t.math).display_math())).collect();
+    for c in [palette::GREEK_LOWER, palette::GREEK_UPPER, palette::OPERATORS].concat().chars() {
+        faces.push((c.to_string(), equashion_math::Math::new(vec![Node::Text(c.to_string())])));
+    }
+    for (name, m) in faces {
+        let l = layout_equation(&*fonts, &m, DEFAULT_FAMILY, 15.0, false, Rgb::WHITE, 1.0);
+        let notdef = l.scene.items.iter().any(|p| matches!(p, Prim::Glyphs { glyphs, .. } if glyphs.iter().any(|g| g.0 == 0)));
+        assert!(!notdef, "palette face {name} has a missing glyph");
+    }
+}

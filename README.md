@@ -14,7 +14,7 @@ and [DIVERGENCE.md](DIVERGENCE.md) for behaviour that now differs from WordCraft
 | Crate | Path | Depends on | What it does |
 |---|---|---|---|
 | `equashion-math` | `crates/math` | quick-xml, serde | Math tree, OMML import/export, linear format, templates, edit model (`Editor`, `Caret`, `Key`) |
-| `equashion-font` | `crates/font` | skrifa, harfrust, kurbo | Font database (`FontDb`, `FontDb::bundled_only()`), outlines, fallback, shaping; bundles Source Serif 4 (default family) and Inter |
+| `equashion-font` | `crates/font` | skrifa, harfrust, kurbo | Font database (`FontDb`, `FontDb::bundled_only()`), outlines, fallback, shaping; bundles Source Serif 4 (default family), Inter and STIX Two Math (symbol fallback) |
 | `equashion-layout` | `crates/layout` | math, font, kurbo | `layout_equation` -> `EqLayout` (a `Scene` plus caret rectangles and hit testing), `layout_math_wrapped`, `LayoutCache`, the `MathFonts` trait |
 | `equashion-render` | `crates/render` | layout, vello_cpu | `render_scene` / `render_eq` to premultiplied RGBA, `scene_to_svg` |
 | `equashion-egui` | `crates/egui` | math, layout, render, egui | `EquationEditor`: the equation editor as an egui widget (palette, canvas with caret, linear field), no host types |
@@ -122,9 +122,6 @@ the canvas.
 
 ## Not built yet
 
-- A bundled math symbol font. Source Serif 4 and Inter lack ∇, ∮, ⌈⌉⌊⌋ and ⟨⟩; with
-  `FontDb::bundled_only()` these draw as .notdef boxes (see DIVERGENCE.md). `FontDb::global()`
-  (native only) falls back to system fonts, and `FontDb::add_font` takes any font.
 - PNG/JPEG encoding of rendered pixels (WordCraft's used the `image` crate; not carried over).
 
 ## Licence

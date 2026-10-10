@@ -872,3 +872,10 @@ fn a_parenthesised_exponent_is_the_group_itself() {
     assert!(e.caret().path.is_empty(), "closing the group ends the exponent");
     assert_eq!(lin(&e), "x^(n+1)");
 }
+
+#[test]
+fn typed_angle_floor_and_ceiling_commands_become_brackets() {
+    let mut e = Editor::new(Math::default());
+    e.type_str(r"\langle u,v\rangle+\lfloor x\rfloor+\lceil y\rceil");
+    assert_eq!(crate::to_linear(e.math()).replace(' ', ""), "⟨u,v⟩+⌊x⌋+⌈y⌉");
+}

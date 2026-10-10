@@ -112,11 +112,13 @@ fn goldens_match() {
     assert!(items.len() >= 40, "{} corpus items", items.len());
     for (id, m, display) in &items {
         let l = layout_equation_wrapped(&db, m, FAMILY, SIZE, *display, Rgb::BLACK, PAD, LINE);
-        // Every face the scene uses is the pinned family (no silent fallback).
+        // Every face the scene uses is a bundled one: the pinned family, Inter, or STIX Two Math
+        // (the fallback for symbols the text faces lack), and no glyph is .notdef.
         for p in &l.scene.items {
-            if let equashion_layout::Prim::Glyphs { font, .. } = p {
+            if let equashion_layout::Prim::Glyphs { font, glyphs, .. } = p {
                 let f = db.face_by_id(*font).unwrap();
-                assert!(f.family == FAMILY || f.family == "Inter", "{id}: {f:?}");
+                assert!(f.family == FAMILY || f.family == "Inter" || f.family == "STIX Two Math", "{id}: {f:?}");
+                assert!(glyphs.iter().all(|g| g.0 != 0), "{id}: .notdef glyph in {f:?}");
             }
         }
         // The raster backend draws the same scene without trouble.

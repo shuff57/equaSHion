@@ -51,6 +51,9 @@ Trimmed:
   Sans 3"; it is now `DEFAULT_FAMILY`, "Source Serif 4". The last-resort face is Source Serif 4
   Regular.
 
+Later added (not from WordCraft): STIX Two Math Regular, bundled after the text faces as the
+fallback for math symbols they lack (see DIVERGENCE.md and ATTRIBUTION.md).
+
 Added: `FontDb::bundled_only()` (no font folders, system fallback off), `FaceId`,
 `FontFace::face_id`, `FontDb::face_by_id`, and tests that pin the bundled family list and the
 default family.

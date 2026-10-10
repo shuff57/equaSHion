@@ -166,7 +166,7 @@ mod tests {
     #[test]
     fn bundled_families_load_and_nothing_else() {
         let db = db();
-        assert_eq!(db.families(), vec!["Inter".to_string(), DEFAULT_FAMILY.to_string()]);
+        assert_eq!(db.families(), vec!["Inter".to_string(), DEFAULT_FAMILY.to_string(), "STIX Two Math".to_string()]);
         let styles = db.styles(DEFAULT_FAMILY);
         for s in ["Regular", "Italic", "Bold", "Bold Italic"] {
             assert!(styles.iter().any(|x| x == s), "{s} in {styles:?}");

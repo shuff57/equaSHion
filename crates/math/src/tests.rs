@@ -1220,3 +1220,17 @@ fn prime_parallel_and_long_arrows_are_known() {
     assert!(m.body.iter().any(|n| matches!(n, Node::GroupChr { ch: '\u{2192}', top: true, .. })));
     assert!(m.body.iter().any(|n| matches!(n, Node::GroupChr { ch: '\u{2190}', top: true, .. })));
 }
+
+#[test]
+fn angle_floor_and_ceiling_commands_are_known() {
+    for (latex, typed) in [
+        (r"\langle u,v\rangle", "⟨u,v⟩"),
+        (r"\lfloor x\rfloor+\lceil y\rceil", "⌊x⌋+⌈y⌉"),
+        (r"\left\langle a\right\rangle", "⟨a⟩"),
+        (r"\left\lfloor\frac{n}{2}\right\rfloor", "⌊n/2⌋"),
+    ] {
+        let m = from_linear(latex);
+        assert!(unknown_commands(&m).is_empty(), "{latex}: {:?}", unknown_commands(&m));
+        assert_eq!(to_linear(&m).replace(' ', ""), to_linear(&from_linear(typed)).replace(' ', ""), "{latex}");
+    }
+}

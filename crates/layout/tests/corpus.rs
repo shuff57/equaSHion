@@ -88,11 +88,25 @@ fn every_caret_position_of_every_corpus_equation_has_a_finite_rect() {
     assert!(total > 500, "{total} caret positions checked");
 }
 
-/// The bundled fonts (Source Serif 4, Inter) lack some math symbols, and `bundled_only` has no
-/// system fallback, so these render as .notdef boxes. Pinned here so the gap stays visible: the
-/// list may only shrink (by bundling a math symbol font, see README.md).
+/// Source Serif 4 and Inter lack these math symbols; the bundled STIX Two Math covers them,
+/// so `bundled_only` (no system fallback) draws them from it. This used to be a pin of the gap
+/// (.notdef boxes in the goldens) before STIX Two Math was bundled.
 #[test]
-fn characters_the_bundled_fonts_lack_are_known() {
+fn symbols_the_text_faces_lack_resolve_to_stix_two_math() {
+    let db = fonts();
+    let regular = db.face(DEFAULT_FAMILY, "Regular");
+    for c in ['\u{2207}', '\u{222E}', '\u{2308}', '\u{2309}', '\u{230A}', '\u{230B}', '\u{27E8}', '\u{27E9}'] {
+        assert!(!regular.covers(c), "{c} is now in Source Serif 4: simplify this test");
+        let f = db.fallback_for(c, regular.id()).unwrap_or_else(|| panic!("no face for {c}"));
+        assert_eq!(f.family, "STIX Two Math", "{c}");
+        assert_ne!(f.glyph_for(c), 0, "{c}");
+    }
+}
+
+/// Every character of every corpus equation has a face, and no laid-out corpus equation draws a
+/// .notdef glyph (glyph id 0).
+#[test]
+fn no_corpus_equation_draws_a_missing_glyph() {
     let db = fonts();
     let regular = db.face(DEFAULT_FAMILY, "Regular");
     let mut missing: Vec<char> = corpus()
@@ -102,7 +116,15 @@ fn characters_the_bundled_fonts_lack_are_known() {
         .collect();
     missing.sort_unstable();
     missing.dedup();
-    let known = ['\u{2207}', '\u{222E}', '\u{2308}', '\u{2309}', '\u{230A}', '\u{230B}', '\u{27E8}', '\u{27E9}'];
-    assert!(missing.iter().all(|c| known.contains(c)), "newly missing: {missing:?}");
-    assert_eq!(missing, known, "update the list (and README.md) when a gap closes");
+    assert_eq!(missing, Vec::<char>::new(), "characters no bundled font covers");
+    for (id, m, display) in corpus() {
+        let l = layout_equation(db, &m, DEFAULT_FAMILY, 24.0, display, Rgb::BLACK, 4.0);
+        let notdef: usize = l
+            .scene
+            .items
+            .iter()
+            .map(|p| if let equashion_layout::Prim::Glyphs { glyphs, .. } = p { glyphs.iter().filter(|g| g.0 == 0).count() } else { 0 })
+            .sum();
+        assert_eq!(notdef, 0, "{id}: .notdef glyphs drawn");
+    }
 }

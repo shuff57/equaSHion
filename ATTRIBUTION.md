@@ -11,8 +11,10 @@ carried over; the font files are byte-identical to WordCraft's `assets/fonts/`.
 | `assets/fonts/SourceSerif4-Bold.ttf` | Frank Grießhammer, Adobe (released as open source) | https://github.com/adobe-fonts/source-serif | OFL-1.1 (`assets/fonts/OFL-SourceSerif4.txt`) | Bold math |
 | `assets/fonts/SourceSerif4-BoldIt.ttf` | Frank Grießhammer, Adobe (released as open source) | https://github.com/adobe-fonts/source-serif | OFL-1.1 (`assets/fonts/OFL-SourceSerif4.txt`) | Bold italic math |
 | `assets/fonts/Inter-Regular.ttf` | Rasmus Andersson / The Inter Project Authors | https://github.com/rsms/inter | OFL-1.1 (`assets/fonts/OFL-Inter.txt`) | Second bundled family; the ported WordCraft layout unit tests use it |
+| `assets/fonts/STIXTwoMath-Regular.otf` | The STIX Fonts Project Authors | https://github.com/stipub/stixfonts (copied unmodified from Fedora's `stix-fonts-2.13b171` package, `/usr/share/fonts/stix-fonts/`) | OFL-1.1 (`assets/fonts/OFL-STIXTwoMath.txt`) | Math symbol fallback (∇ ∮ ⌈⌉⌊⌋ ⟨⟩ ...); not subset (838 KB) |
 | `assets/fonts/OFL-SourceSerif4.txt` | (licence text) | upstream project | — | |
 | `assets/fonts/OFL-Inter.txt` | (licence text) | upstream project | — | |
+| `assets/fonts/OFL-STIXTwoMath.txt` | (licence text) | Fedora `stix-fonts` package (`/usr/share/licenses/stix-fonts/OFL.txt`) | — | |
 
 WordCraft's table credits the Source Serif 4 files jointly with Source Sans 3 ("Paul D. Hunt /
 Frank Grießhammer"); Source Sans 3 is not bundled here, so only the Source Serif designer is

@@ -13,7 +13,7 @@ pub struct Check {
     pub ok: bool,
     /// Why it failed.
     pub reason: Option<String>,
-    /// Glyphs drawn as .notdef (the fonts lack the character). Reported, not a failure.
+    /// Glyphs drawn as .notdef (no bundled font has the character): a failure.
     pub missing_glyphs: usize,
     /// Canvas size, points.
     pub size: (f64, f64),
@@ -48,6 +48,10 @@ fn check(fonts: &FontDb, id: String, m: &Math, display: bool) -> Check {
     }
     c.missing_glyphs =
         l.scene.items.iter().map(|p| if let Prim::Glyphs { glyphs, .. } = p { glyphs.iter().filter(|g| g.0 == 0).count() } else { 0 }).sum();
+    if c.missing_glyphs > 0 {
+        c.reason = Some(format!("{} glyph(s) drawn as .notdef", c.missing_glyphs));
+        return c;
+    }
     let r = equashion_render::render_scene(&l.scene, fonts, 1.0, None);
     let ink = r.pixels.as_chunks::<4>().0.iter().filter(|p| p[3] > 0).count();
     if ink == 0 {
