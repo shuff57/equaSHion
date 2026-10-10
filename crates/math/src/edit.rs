@@ -1158,7 +1158,7 @@ impl Editor {
         let node = parent.and_then(|s| s.get(pi)).map(Node::bare);
         let in_script = matches!(node, Some(Node::Script { .. })) && c >= 1;
         let groups = match node {
-            Some(Node::Frac { .. } | Node::Rad { .. }) => true,
+            Some(Node::Frac { .. } | Node::Rad { .. } | Node::Func { .. }) => true,
             Some(Node::Script { .. }) => in_script,
             Some(Node::Nary { sub, sup, .. }) => c < usize::from(sub.is_some()) + usize::from(sup.is_some()),
             Some(Node::Limit { .. }) => c == 1,
@@ -1167,14 +1167,17 @@ impl Editor {
         if !groups {
             return;
         }
+        let last = node.is_some_and(|n| c + 1 == children(n).len());
+        let ends = matches!(node, Some(Node::Rad { .. } | Node::Func { .. } | Node::Frac { .. })) && last;
         if let Some(seq) = self.seq_mut() {
             let term = std::mem::take(seq);
             *seq = unwrap_paren(term);
         }
         self.caret.pos = self.len_here();
         // `x^(n+1)`: the exponent is the group, so closing it also ends the exponent (DeckCraft
-        // 7972cf5).
-        if in_script {
+        // 7972cf5). The same for the argument of `sin(..)`, a radicand (`sqrt(x)+1`) and a
+        // denominator (`1/(x-1)+2`): the closing parenthesis ends the structure, as in Desmos.
+        if in_script || ends {
             self.exit_script_slot();
         }
     }

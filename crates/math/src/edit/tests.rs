@@ -899,3 +899,17 @@ fn caret_edge_queries() {
     f.key(Key::Right, false);
     assert!(!f.at_start() && !f.at_end(), "inside the numerator is neither edge");
 }
+
+fn typed_linear(src: &str) -> String {
+    to_linear(typed(src).math())
+}
+
+#[test]
+fn closing_a_parenthesis_ends_the_radical_function_or_denominator() {
+    assert_eq!(typed_linear("sqrt(x)+1"), "√(x)+1");
+    assert_eq!(typed_linear("sqrt(x+1)*2"), "√(x+1)·2");
+    assert_eq!(typed_linear("sin(x)+1"), "sin(x)+1");
+    assert_eq!(typed_linear("1/(x-1)+2"), "1/(x−1)+2");
+    // Without parentheses the structure keeps taking what is typed, as before.
+    assert_eq!(typed_linear("sqrt x+1"), "√(x+1)");
+}

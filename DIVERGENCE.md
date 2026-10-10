@@ -76,3 +76,12 @@ The typed-text parser now knows `\langle`, `\rangle`, `\lfloor`, `\rfloor`, `\lc
 become the characters ⟨ ⟩ ⌊ ⌋ ⌈ ⌉ as text, the same as typing those characters; with `\left` /
 `\right` they are still text (those two are ignored, as before), so the drawn angle and floor
 delimiters of the layout are only reached from OMML.
+
+## Closing a parenthesis ends the structure it closes
+
+`sqrt(x)+1`, `sin(x)+1` and `1/(x-1)+2` used to leave the caret inside the radical, the function
+argument or the denominator after the `)`, so the `+1` was typed into it (`√(x+1)`, a doubled
+`sin((x))`). Closing a parenthesis that is the whole slot now ends the structure, the way
+`x^(n+1)` already did and the way Desmos behaves: the group's parentheses are dropped (the
+structure already groups) and the caret moves to just after it. `sqrt x+1` without parentheses
+still keeps taking what follows. Needed so equations typed for graphing mean what they say.
