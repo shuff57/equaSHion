@@ -8,6 +8,12 @@ description = "equaSHion fonts: font database (bundled OFL + optional system fon
 [lints]
 workspace = true
 
+[features]
+default = ["extra-fonts"]
+# Source Serif 4 Bold and Bold Italic, Inter and STIX Two Math. Without it only Source Serif 4
+# Regular and Italic are compiled in (a UI that loads the rest at run time with `add_font`).
+extra-fonts = []
+
 [dependencies]
 kurbo = { workspace = true }
 skrifa = { workspace = true }

@@ -23,6 +23,11 @@ pub fn bundled() -> &'static [&'static [u8]] {
     BUNDLED
 }
 
+#[cfg(not(feature = "extra-fonts"))]
+static BUNDLED: &[&[u8]] =
+    &[include_bytes!("../../../assets/fonts/SourceSerif4-Regular.ttf"), include_bytes!("../../../assets/fonts/SourceSerif4-It.ttf")];
+
+#[cfg(feature = "extra-fonts")]
 static BUNDLED: &[&[u8]] = &[
     include_bytes!("../../../assets/fonts/SourceSerif4-Regular.ttf"),
     include_bytes!("../../../assets/fonts/SourceSerif4-It.ttf"),

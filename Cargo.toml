@@ -14,9 +14,9 @@ publish = false
 [workspace.dependencies]
 # internal
 equashion-math = { path = "crates/math" }
-equashion-font = { path = "crates/font" }
-equashion-layout = { path = "crates/layout" }
-equashion-render = { path = "crates/render" }
+equashion-font = { path = "crates/font", default-features = false }
+equashion-layout = { path = "crates/layout", default-features = false }
+equashion-render = { path = "crates/render", default-features = false }
 equashion-egui = { path = "crates/egui" }
 
 # foundation

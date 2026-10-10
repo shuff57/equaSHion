@@ -8,6 +8,10 @@ description = "equaSHion layout: TeX-style equation layout into a backend-neutra
 [lints]
 workspace = true
 
+[features]
+default = ["extra-fonts"]
+extra-fonts = ["equashion-font/extra-fonts"]
+
 [dependencies]
 equashion-math = { workspace = true }
 equashion-font = { workspace = true }

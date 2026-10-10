@@ -9,7 +9,8 @@ description = "equaSHion rendering: equation scenes to RGBA pixels (vello_cpu) a
 workspace = true
 
 [features]
-default = ["raster"]
+default = ["raster", "extra-fonts"]
+extra-fonts = ["equashion-layout/extra-fonts"]
 # RGBA rendering through vello_cpu. SVG output does not need it.
 raster = ["dep:vello_cpu"]
 
