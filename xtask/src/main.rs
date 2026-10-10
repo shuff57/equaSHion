@@ -12,17 +12,32 @@ commands:
   check   cargo fmt --check, clippy -D warnings, test, and a wasm32 check of the
           web-facing crates (stops at the first failure)
   bless   rewrite the golden files (EQUASHION_BLESS=1 cargo test -p equashion-render)
+  web     build the web showcase with trunk (apps/equashion-web -> dist/), print wasm sizes
+  serve   serve dist/ at http://127.0.0.1:8780/ (EQUASHION_PORT overrides the port)
+  smoke   serve dist/ and run tests/browser/smoke.sh against it (playwright-cli, headless)
 ";
 
-/// Crates that must build for `wasm32-unknown-unknown` (the web page comes next).
-const WASM_CRATES: &[(&str, &str)] =
-    &[("equashion-layout", "crates/layout"), ("equashion-render", "crates/render"), ("equashion-egui", "crates/egui")];
+/// Where `cargo xtask web` puts the site and `serve` / `smoke` read it.
+const DIST: &str = "dist";
+/// The port `serve` and `smoke` use unless EQUASHION_PORT is set.
+const PORT: u16 = 8780;
+
+/// Crates that must build for `wasm32-unknown-unknown`.
+const WASM_CRATES: &[(&str, &str)] = &[
+    ("equashion-layout", "crates/layout"),
+    ("equashion-render", "crates/render"),
+    ("equashion-egui", "crates/egui"),
+    ("equashion-web", "apps/equashion-web"),
+];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("check") => cmd_check(),
         Some("bless") => cmd_bless(),
+        Some("web") => cmd_web(),
+        Some("serve") => cmd_serve(),
+        Some("smoke") => cmd_smoke(),
         Some("-h" | "--help" | "help") | None => {
             print!("{USAGE}");
             Ok(())
@@ -88,4 +103,135 @@ fn cmd_bless() -> Result<(), String> {
     let mut test = cargo();
     test.env("EQUASHION_BLESS", "1").args(["test", "-p", "equashion-render"]);
     run("bless", test)
+}
+
+fn cmd_web() -> Result<(), String> {
+    let mut trunk = Command::new("trunk");
+    trunk.current_dir(root().join("apps/equashion-web")).args(["build", "--release"]);
+    run("trunk build --release", trunk)?;
+    let dist = root().join(DIST);
+    let mut found = false;
+    for e in std::fs::read_dir(&dist).map_err(|e| format!("{}: {e}", dist.display()))?.flatten() {
+        let p = e.path();
+        if p.extension().is_some_and(|x| x == "wasm") {
+            found = true;
+            let raw = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+            let gz = Command::new("gzip")
+                .args(["-9", "-c"])
+                .arg(&p)
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| o.stdout.len().to_string())
+                .unwrap_or_else(|| "? (no gzip)".into());
+            eprintln!("xtask: {}: {raw} bytes raw, {gz} bytes gzip -9", p.file_name().map(|n| n.to_string_lossy()).unwrap_or_default());
+        }
+    }
+    if !found {
+        return Err(format!("no .wasm in {}", dist.display()));
+    }
+    eprintln!("xtask: web built into {}", dist.display());
+    Ok(())
+}
+
+fn port() -> u16 {
+    std::env::var("EQUASHION_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(PORT)
+}
+
+fn dist_ready() -> Result<PathBuf, String> {
+    let dist = root().join(DIST);
+    if !dist.join("index.html").is_file() {
+        return Err(format!("{}/index.html is missing: run `cargo xtask web` first", dist.display()));
+    }
+    Ok(dist)
+}
+
+fn cmd_serve() -> Result<(), String> {
+    let dist = dist_ready()?;
+    let listener = serve::bind(port())?;
+    eprintln!("xtask: serving {} at http://127.0.0.1:{}/ (Ctrl+C stops)", dist.display(), port());
+    serve::run(listener, dist);
+    Ok(())
+}
+
+fn cmd_smoke() -> Result<(), String> {
+    let dist = dist_ready()?;
+    let listener = serve::bind(port())?;
+    std::thread::spawn(move || serve::run(listener, dist));
+    let url = format!("http://127.0.0.1:{}/", port());
+    let mut sh = Command::new("bash");
+    sh.current_dir(root()).arg("tests/browser/smoke.sh").arg(&url);
+    run("smoke", sh)
+}
+
+/// A minimal static file server for `dist/` (std only, one thread per connection).
+mod serve {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::path::{Component, Path, PathBuf};
+
+    pub fn bind(port: u16) -> Result<TcpListener, String> {
+        TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("127.0.0.1:{port}: {e}"))
+    }
+
+    pub fn run(listener: TcpListener, root: PathBuf) {
+        for stream in listener.incoming().flatten() {
+            let root = root.clone();
+            std::thread::spawn(move || {
+                let _ = handle(stream, &root);
+            });
+        }
+    }
+
+    fn mime(p: &Path) -> &'static str {
+        match p.extension().and_then(|x| x.to_str()).unwrap_or("") {
+            "html" => "text/html; charset=utf-8",
+            "js" => "text/javascript; charset=utf-8",
+            "wasm" => "application/wasm",
+            "css" => "text/css; charset=utf-8",
+            "json" => "application/json",
+            "png" => "image/png",
+            "svg" => "image/svg+xml",
+            "ico" => "image/x-icon",
+            _ => "application/octet-stream",
+        }
+    }
+
+    fn handle(stream: TcpStream, root: &Path) -> std::io::Result<()> {
+        let mut reader = BufReader::new(stream.try_clone()?);
+        let mut line = String::new();
+        reader.read_line(&mut line)?;
+        // Drain the headers.
+        let mut h = String::new();
+        while reader.read_line(&mut h)? > 2 {
+            h.clear();
+        }
+        let mut parts = line.split_whitespace();
+        let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or("/"));
+        let path = target.split(['?', '#']).next().unwrap_or("/");
+        let rel = Path::new(path.trim_start_matches('/'));
+        let safe = rel.components().all(|c| matches!(c, Component::Normal(_)));
+        let mut file = root.join(rel);
+        if file.is_dir() {
+            file = file.join("index.html");
+        }
+        let mut out = stream;
+        match (method, safe, std::fs::read(&file)) {
+            ("GET" | "HEAD", true, Ok(body)) => {
+                let head = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+                    mime(&file),
+                    body.len()
+                );
+                out.write_all(head.as_bytes())?;
+                if method == "GET" {
+                    out.write_all(&body)?;
+                }
+            }
+            _ => {
+                out.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nnot found")?;
+            }
+        }
+        out.flush()
+    }
 }

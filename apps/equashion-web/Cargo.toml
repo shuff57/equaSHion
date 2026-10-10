@@ -1,0 +1,34 @@
+[package]
+name = "equashion-web"
+description = "equaSHion web showcase: the equation editor widget, a corpus gallery, an OMML round-trip page and a selftest, in one eframe web app (WebGL2 via glow)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "equashion-web"
+path = "src/main.rs"
+
+[dependencies]
+equashion-math = { workspace = true }
+equashion-layout = { workspace = true }
+equashion-render = { workspace = true }
+equashion-egui = { workspace = true }
+egui = { workspace = true }
+log = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# glow = WebGL2 only (no wgpu, no WebGPU): works in headless Chromium and keeps the wasm small.
+eframe = { workspace = true, features = ["default_fonts", "glow"] }
+# Pinned to the installed wasm-bindgen CLI (trunk uses it instead of downloading one).
+wasm-bindgen = "=0.2.128"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "Location"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+egui_kittest = { workspace = true }

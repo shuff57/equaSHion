@@ -18,7 +18,8 @@ and [DIVERGENCE.md](DIVERGENCE.md) for behaviour that now differs from WordCraft
 | `equashion-layout` | `crates/layout` | math, font, kurbo | `layout_equation` -> `EqLayout` (a `Scene` plus caret rectangles and hit testing), `layout_math_wrapped`, `LayoutCache`, the `MathFonts` trait |
 | `equashion-render` | `crates/render` | layout, vello_cpu | `render_scene` / `render_eq` to premultiplied RGBA, `scene_to_svg` |
 | `equashion-egui` | `crates/egui` | math, layout, render, egui | `EquationEditor`: the equation editor as an egui widget (palette, canvas with caret, linear field), no host types |
-| `xtask` | `xtask` | std | `cargo xtask check`, `cargo xtask bless` |
+| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web showcase: Editor, Gallery, OMML and Selftest tabs, `window.equashion` test hooks |
+| `xtask` | `xtask` | std | `cargo xtask check`, `bless`, `web`, `serve`, `smoke` |
 
 ```rust
 use equashion_layout::{DEFAULT_FAMILY, FontDb, Rgb, layout_equation};
@@ -77,10 +78,39 @@ cargo run -p equashion-egui --example widget -- --light # light theme
 
 The example shows the widget with live linear and OMML readouts.
 
+## The web showcase
+
+One eframe app compiled to wasm (WebGL2 through glow, no wgpu, no JavaScript framework):
+
+- **Editor**: the `EquationEditor` widget, `linear()` and `omml()` readouts with Copy buttons,
+  and the unknown backslash commands.
+- **Gallery**: every row of `corpus/equations.tsv` rendered by equashion-render (long ones wrap,
+  very wide ones take two columns); click a card to edit it.
+- **OMML**: paste OMML or pick a `corpus/omml/` sample; shows the normalised OMML and whether
+  the round trip is idempotent.
+- **Selftest**: parse -> layout -> render (and an OMML round trip) over the whole corpus, pass /
+  fail per item, missing glyphs counted.
+
+```sh
+cargo xtask web     # trunk build --release in apps/equashion-web -> dist/ (prints wasm size)
+cargo xtask serve   # http://127.0.0.1:8780/  (EQUASHION_PORT overrides)
+cargo xtask smoke   # serve dist/ and run tests/browser/smoke.sh (playwright-cli, headless)
+```
+
+Needs `trunk` (0.21) and the `wasm32-unknown-unknown` target; `wasm-bindgen` is pinned to
+`=0.2.128` to match the installed `wasm-bindgen` CLI. The canvas is opaque to the DOM, so the
+page exposes test hooks on `window.equashion`: `linear()`, `omml()`, `setLinear(s)`,
+`selftest()` (`{ok, total, failures: [{id, reason}], missingGlyphs}`), `galleryCount()`,
+`activeTab()`, `setTab(name)`, `unknownCommands()` and `ready`. The smoke test uses its own
+playwright-cli session (`equashion`), asserts the hooks, saves screenshots of every tab to
+`tests/browser/out/` (gitignored) and fails if one is blank (`tests/browser/check_png.py`).
+The showcase itself is plain egui and is also tested natively with egui_kittest
+(`apps/equashion-web/tests/showcase.rs`).
+
 ## Checks
 
 ```sh
-cargo xtask check   # fmt --check, clippy -D warnings, all tests, wasm32 check of layout + render
+cargo xtask check   # fmt --check, clippy -D warnings, all tests, wasm32 check of layout, render, egui, web
 cargo xtask bless   # rewrite tests/golden/ after an intended layout change (review the diff)
 ```
 
@@ -92,7 +122,6 @@ the canvas.
 
 ## Not built yet
 
-- `equashion-wasm` and a web page.
 - A bundled math symbol font. Source Serif 4 and Inter lack ∇, ∮, ⌈⌉⌊⌋ and ⟨⟩; with
   `FontDb::bundled_only()` these draw as .notdef boxes (see DIVERGENCE.md). `FontDb::global()`
   (native only) falls back to system fonts, and `FontDb::add_font` takes any font.
