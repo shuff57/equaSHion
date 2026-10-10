@@ -18,3 +18,7 @@ WordCraft's table credits the Source Serif 4 files jointly with Source Sans 3 ("
 Frank Grießhammer"); Source Sans 3 is not bundled here, so only the Source Serif designer is
 named. The OFL text in `OFL-SourceSerif4.txt` carries Adobe's copyright notice.
 
+The OMML samples in `corpus/omml/` are copied from the WordCraft and DeckCraft test suites
+(MIT OR Apache-2.0, like the code); PROVENANCE.md lists the file and line each came from. The
+typed equations in `corpus/equations.tsv` and the generated files in `tests/golden/` are
+original to this repository.

@@ -14,7 +14,10 @@ use std::sync::Arc;
 
 pub use equashion_font::{DEFAULT_FAMILY, FaceId, FontDb, FontFace};
 pub use kurbo::{BezPath, Rect};
-pub use math::{Cached, EqLayout, LayoutCache, MathBox, SeqGeo, Src, emit, hit_geo, layout_equation, layout_math, layout_math_wrapped, layout_src};
+pub use math::{
+    Cached, EqLayout, LayoutCache, MathBox, SeqGeo, Src, emit, hit_geo, layout_equation, layout_equation_wrapped, layout_math, layout_math_wrapped,
+    layout_src,
+};
 pub use scene::{Prim, Rgb, Scene};
 
 /// The fonts equation layout reads: faces by family and style, a fallback face for characters

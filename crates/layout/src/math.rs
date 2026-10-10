@@ -1616,9 +1616,29 @@ pub fn hit_geo(geo: &[SeqGeo], x: f64, y: f64) -> equashion_math::Caret {
 /// Lay an equation out at `size` points in `family` with `pad` points around it, tall enough for
 /// a caret even when it is empty.
 pub fn layout_equation(fonts: &dyn MathFonts, m: &Math, family: &str, size: f64, display: bool, color: Rgb, pad: f64) -> EqLayout {
-    let b = layout_math(fonts, m, family, size, false, display);
+    layout_equation_wrapped(fonts, m, family, size, display, color, pad, f64::INFINITY)
+}
+
+/// [`layout_equation`], with the top-level row broken into lines no wider than `max_w` points
+/// (and an unbreakable equation shrunk to fit), as [`layout_math_wrapped`] does.
+pub fn layout_equation_wrapped(
+    fonts: &dyn MathFonts,
+    m: &Math,
+    family: &str,
+    size: f64,
+    display: bool,
+    color: Rgb,
+    pad: f64,
+    max_w: f64,
+) -> EqLayout {
+    let b = layout_math_wrapped(fonts, m, family, size, false, display, max_w);
     let sz = size.clamp(0.5, 4000.0);
-    let (asc, desc) = (b.asc.max(0.78 * sz), b.desc.max(0.25 * sz));
+    // The canvas holds every caret too: a row's caret reaches a minimum depth below its baseline
+    // even when the row has no ink there (the `x` of a denominator), which WordCraft's canvas
+    // cut off by up to a point or two.
+    let geo_top = b.geo.iter().map(|g| -g.top).filter(|v| v.is_finite()).fold(0.0, f64::max);
+    let geo_bottom = b.geo.iter().map(|g| g.bottom).filter(|v| v.is_finite()).fold(0.0, f64::max);
+    let (asc, desc) = (b.asc.max(0.78 * sz).max(geo_top), b.desc.max(0.25 * sz).max(geo_bottom));
     let (ox, oy) = (pad, pad + asc);
     let mut items = Vec::new();
     emit(&b, ox, oy, color, &mut items);

@@ -35,9 +35,30 @@ digit exponent. The same applies to subscripts (`a_1b` is `a_1 b`, `x_i+1` is `x
 
 ## Default equation font
 
-WordCraft's equation editor asked for "Cambria Math", which is not bundled. Its font database
-then fell back to Source Sans 3 without saying so. equaSHion names its default family,
+WordCraft's equation editor (`eqdialog.rs`, `EQ_FAMILY`) asked for "Cambria Math", which is
+not bundled. Unless the system had it installed, the font database fell back to Source Sans 3
+without saying so. equaSHion names its default family,
 `equashion_font::DEFAULT_FAMILY` = "Source Serif 4", bundles all four styles of it, and pins
 that family in the golden tests. An unknown family still falls back, now to Source Serif 4.
 "Cambria Math" is still present in some OMML test data in `crates/math/src/tests.rs`, because
 Word writes it there, but it is never a default.
+
+## Editor canvas height
+
+`layout_equation` sized the canvas from the equation's ink (with a floor of 0.78 em above and
+0.25 em below the baseline). A row's caret reaches at least 0.22 em below its baseline even
+where the row has no ink there, so in a display fraction such as `lim_{x→0} sin x / x` the
+caret in the denominator stuck out of the canvas by about a point. The canvas now also covers
+every caret row. Found by the corpus property test
+(`crates/layout/tests/corpus.rs`), which checks that every caret lies inside the canvas.
+
+## Symbols the bundled fonts lack
+
+WordCraft's `FontDb::global()` loads system fonts for characters its bundled fonts lack.
+`FontDb::bundled_only()` does not, and Source Serif 4 and Inter have no glyph for ∇ (U+2207),
+∮ (U+222E), ⌈ ⌉ ⌊ ⌋ (U+2308–230B) or ⟨ ⟩ (U+27E8, U+27E9). Those draw as .notdef boxes in
+the goldens (`maxwell_*`, `oint`, `floor_ceil`, `angle`). A host using `FontDb::global()` or
+`FontDb::add_font` gets them from the system or the added font. The gap is pinned by
+`characters_the_bundled_fonts_lack_are_known`. The typed-text parser keeps `⟨ ⟩` and the
+floor/ceiling brackets as text (WordCraft does the same), so the drawn angle and floor
+delimiters of the layout are only reached from OMML.

@@ -1,0 +1,16 @@
+[package]
+name = "equashion-render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "equaSHion rendering: equation scenes to RGBA pixels (vello_cpu) and to SVG"
+
+[lints]
+workspace = true
+
+[dependencies]
+equashion-layout = { workspace = true }
+vello_cpu = { workspace = true }
+
+[dev-dependencies]
+equashion-math = { workspace = true }
