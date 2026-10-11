@@ -12,7 +12,7 @@ use equashion_math::to_latex;
 use crate::corpus::{self, Row};
 use crate::export::{self, CopyKind, ImportError, Payload};
 use crate::palette::{self, Item, Palette as SymbolPalette};
-use crate::report::{self, DESC_MAX, Kind, Shot, Submission, TITLE_MAX};
+use crate::report::{self, DESC_MAX, Issue, Kind, Shot, Status, Submission, TITLE_MAX};
 use crate::selftest::{self, Report};
 use crate::theme::{self, Palette, R_CONTROL, R_PANEL, S4, S8, S12, S16, S24, S32, T_BODY, T_CAPTION, T_H2, T_MONO, ThemePref};
 
@@ -131,6 +131,18 @@ struct ReportForm {
     /// The browser's user agent and the page's address, set by the shell.
     browser: String,
     page_url: String,
+    /// The public list of reported issues.
+    issues: Vec<Issue>,
+    /// The list was asked for at least once.
+    listed: bool,
+    loading: bool,
+    /// The shell has to fetch the list.
+    want_list: bool,
+    list_error: Option<String>,
+    /// Votes for the shell to post, and the ones in flight.
+    vote_out: Vec<String>,
+    voting: Vec<String>,
+    vote_error: Option<String>,
 }
 
 impl ReportForm {
@@ -148,7 +160,31 @@ impl ReportForm {
             outbox: Vec::new(),
             browser: String::new(),
             page_url: String::new(),
+            issues: Vec::new(),
+            listed: false,
+            loading: false,
+            want_list: false,
+            list_error: None,
+            vote_out: Vec::new(),
+            voting: Vec::new(),
+            vote_error: None,
         }
+    }
+
+    /// Open or close the form; the first time it opens, the list is asked for.
+    fn set_open(&mut self, on: bool) {
+        self.open = on;
+        if on && !self.listed {
+            self.refresh();
+        }
+    }
+
+    /// Ask the shell for the list again.
+    fn refresh(&mut self) {
+        self.listed = true;
+        self.loading = true;
+        self.want_list = true;
+        self.list_error = None;
     }
 
     /// Back to a clean slate for the next report (the open state stays).
@@ -432,7 +468,7 @@ impl Showcase {
     pub fn set_disclosures(&mut self, import: bool, howto: bool, report: bool) {
         self.import_open = import;
         self.howto_open = howto;
-        self.issue.open = report;
+        self.issue.set_open(report);
     }
 
     /// Fill in the report form (the browser tests and the native tests do this).
@@ -480,6 +516,7 @@ impl Showcase {
             Ok(()) => {
                 self.issue.status = ReportStatus::Sent;
                 self.issue.clear();
+                self.issue.refresh();
             }
             Err(why) => self.issue.status = ReportStatus::Failed(why),
         }
@@ -519,6 +556,61 @@ impl Showcase {
             page_url: r.page_url.clone(),
             app_version: env!("CARGO_PKG_VERSION").to_string(),
         });
+    }
+
+    /// The report form asked for the list (true once per request).
+    pub fn take_list_request(&mut self) -> bool {
+        std::mem::take(&mut self.issue.want_list)
+    }
+
+    /// The list arrived, or could not be fetched.
+    pub fn issues_loaded(&mut self, result: Result<Vec<Issue>, String>) {
+        self.issue.loading = false;
+        match result {
+            Ok(mut items) => {
+                items.sort_by_key(|i| std::cmp::Reverse(i.votes));
+                self.issue.issues = items;
+                self.issue.list_error = None;
+            }
+            Err(why) => self.issue.list_error = Some(why),
+        }
+    }
+
+    /// The reported issues, most voted first.
+    pub fn issues(&self) -> &[Issue] {
+        &self.issue.issues
+    }
+
+    /// Vote for an issue (once: a voted or in-flight issue is ignored).
+    pub fn vote(&mut self, id: &str) {
+        let issue = &mut self.issue;
+        if issue.voting.iter().any(|v| v == id) || issue.issues.iter().any(|i| i.id == id && i.voted) {
+            return;
+        }
+        issue.vote_error = None;
+        issue.voting.push(id.to_string());
+        issue.vote_out.push(id.to_string());
+    }
+
+    /// Votes waiting to be posted.
+    pub fn take_votes(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.issue.vote_out)
+    }
+
+    /// A vote was counted (`Ok` with the new total) or refused.
+    pub fn vote_finished(&mut self, id: &str, result: Result<u32, String>) {
+        let issue = &mut self.issue;
+        issue.voting.retain(|v| v != id);
+        match result {
+            Ok(n) => {
+                if let Some(i) = issue.issues.iter_mut().find(|i| i.id == id) {
+                    i.votes = n;
+                    i.voted = true;
+                }
+                issue.issues.sort_by_key(|i| std::cmp::Reverse(i.votes));
+            }
+            Err(why) => issue.vote_error = Some(why),
+        }
     }
 
     /// The report form is open.
@@ -656,7 +748,7 @@ impl Showcase {
         }
         ui.add_space(S16);
         if palette::disclosure(ui, p, REPORT_LABEL, self.issue.open).clicked() {
-            self.issue.open = !self.issue.open;
+            self.issue.set_open(!self.issue.open);
         }
         if self.issue.open {
             ui.add_space(S8);
@@ -979,6 +1071,70 @@ impl Showcase {
         });
         if send {
             self.submit_report();
+        }
+        self.issue_list(ui, p);
+    }
+
+    /// "Reported so far": the public list with status and a Vote button on each.
+    fn issue_list(&mut self, ui: &mut Ui, p: &Palette) {
+        ui.add_space(S16);
+        let y = ui.cursor().min.y;
+        ui.painter().hline(ui.cursor().min.x..=ui.cursor().min.x + ui.available_width(), y, Stroke::new(1.0, p.border));
+        ui.add_space(S12);
+        ui.label(RichText::new("Reported so far").font(theme::semibold(T_BODY + 2.0)).color(p.strong));
+        ui.add_space(S8);
+        let r = &self.issue;
+        let mut refresh = false;
+        if r.loading {
+            ui.label(RichText::new("Loading...").size(T_BODY).color(p.muted));
+        } else if let Some(why) = &r.list_error {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(format!("The list could not be loaded: {why}")).size(T_BODY).color(p.error));
+                if ui.link(RichText::new("Try again").size(T_BODY).color(p.accent)).clicked() {
+                    refresh = true;
+                }
+            });
+        } else if r.issues.is_empty() {
+            ui.label(RichText::new("Nothing has been reported yet.").size(T_BODY).color(p.muted));
+        }
+        if let Some(why) = &r.vote_error {
+            ui.label(RichText::new(format!("Your vote was not counted: {why}")).size(T_BODY).color(p.error));
+        }
+        let mut voted = None;
+        for i in r.issues.clone() {
+            ui.add_space(S8);
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing = vec2(S12, S4);
+                let pending = r.voting.contains(&i.id);
+                let label = if i.voted { format!("Voted ({})", i.votes) } else { format!("Vote ({})", i.votes) };
+                let b = ui.add_enabled_ui(!i.voted && !pending, |ui| main_button(ui, p, &label, !i.voted && !pending));
+                if b.inner.on_hover_text("This matters to me too").clicked() {
+                    voted = Some(i.id.clone());
+                }
+                ui.vertical(|ui| {
+                    ui.add(egui::Label::new(RichText::new(&i.title).size(T_BODY).color(p.strong)).wrap());
+                    let status = if i.status == Status::Fixed { p.accent_text } else { p.muted };
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing.x = S8;
+                        ui.label(RichText::new(i.kind.label()).size(T_CAPTION + 1.0).color(p.muted));
+                        ui.label(RichText::new(i.status.label()).size(T_CAPTION + 1.0).color(status));
+                        if let Some(url) = &i.screenshot_url {
+                            ui.hyperlink_to(RichText::new("Screenshot").size(T_CAPTION + 1.0).color(p.accent), url);
+                        }
+                    });
+                    let mut text: String = i.description.chars().take(240).collect();
+                    if i.description.chars().count() > 240 {
+                        text.push_str("...");
+                    }
+                    ui.add(egui::Label::new(RichText::new(text).size(T_BODY).color(p.text)).wrap());
+                });
+            });
+        }
+        if refresh {
+            self.issue.refresh();
+        }
+        if let Some(id) = voted {
+            self.vote(&id);
         }
     }
 

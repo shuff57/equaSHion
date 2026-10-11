@@ -543,3 +543,84 @@ fn only_small_images_attach_to_a_report() {
     h.run();
     assert!(h.query_by_label("Screenshots must be images (PNG, JPEG, GIF or WebP).").is_none());
 }
+
+fn issue(id: &str, title: &str, votes: u32, voted: bool) -> equashion_web::Issue {
+    equashion_web::Issue {
+        id: id.into(),
+        kind: equashion_web::ReportKind::Bug,
+        title: title.into(),
+        description: format!("About {title}."),
+        status: equashion_web::IssueStatus::Open,
+        votes,
+        voted,
+        screenshot_url: None,
+    }
+}
+
+#[test]
+fn the_public_list_loads_when_the_form_opens_and_shows_votes_and_status() {
+    use equashion_web::{IssueStatus, REPORT_LABEL};
+    let mut h = tall_harness();
+    assert!(!h.state_mut().take_list_request(), "nothing is fetched while the form is closed");
+    h.get_by_label(REPORT_LABEL).click();
+    h.run();
+    assert!(h.state_mut().take_list_request(), "opening the form asks for the list");
+    assert!(!h.state_mut().take_list_request(), "once");
+    h.get_by_label("Loading...");
+
+    let mut fixed = issue("5", "Old crash", 9, false);
+    fixed.status = IssueStatus::Fixed;
+    h.state_mut().issues_loaded(Ok(vec![issue("3", "Few votes", 1, false), fixed, issue("4", "Mine", 4, true)]));
+    h.run();
+    let ids: Vec<&str> = h.state().issues().iter().map(|i| i.id.as_str()).collect();
+    assert_eq!(ids, ["5", "4", "3"], "most voted first");
+    h.get_by_label("Reported so far");
+    h.get_by_label("Old crash");
+    h.get_by_label("Fixed");
+    h.get_by_label("Voted (4)");
+    h.get_by_label("Vote (9)");
+
+    // Vote once; a second press while it is in flight, or after it counted, queues nothing.
+    h.get_by_label("Vote (1)").click();
+    h.run();
+    assert_eq!(h.state_mut().take_votes(), ["3"]);
+    h.state_mut().vote("3");
+    assert!(h.state_mut().take_votes().is_empty());
+    h.state_mut().vote_finished("3", Ok(2));
+    h.run();
+    h.get_by_label("Voted (2)");
+    h.state_mut().vote("3");
+    assert!(h.state_mut().take_votes().is_empty());
+    h.state_mut().vote("4");
+    assert!(h.state_mut().take_votes().is_empty(), "already voted in this browser");
+}
+
+#[test]
+fn a_list_that_cannot_load_says_why_and_can_be_retried() {
+    use equashion_web::REPORT_LABEL;
+    let mut h = tall_harness();
+    h.get_by_label(REPORT_LABEL).click();
+    h.run();
+    assert!(h.state_mut().take_list_request());
+    h.state_mut().issues_loaded(Err("The network is unavailable.".into()));
+    h.run();
+    h.get_by_label_contains("The network is unavailable.");
+    h.get_by_label("Try again").click();
+    h.run();
+    assert!(h.state_mut().take_list_request());
+}
+
+#[test]
+fn a_sent_report_refreshes_the_list() {
+    use equashion_web::{REPORT_LABEL, ReportKind};
+    let mut h = tall_harness();
+    h.get_by_label(REPORT_LABEL).click();
+    h.run();
+    h.state_mut().take_list_request();
+    h.state_mut().issues_loaded(Ok(vec![]));
+    h.state_mut().fill_report(ReportKind::Bug, "New", "Just now.");
+    h.state_mut().submit_report();
+    h.state_mut().take_reports();
+    h.state_mut().report_finished(Ok(()));
+    assert!(h.state_mut().take_list_request(), "the new report should appear in the list");
+}

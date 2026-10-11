@@ -224,11 +224,86 @@ mod serve {
         if !text.trim_start().starts_with('{') || !text.contains("\"title\"") || !text.contains("\"description\"") {
             return reply(out, "400 Bad Request", "{\"error\":\"That does not look like a report.\"}");
         }
-        let dir = root.parent().unwrap_or(root).join("target").join("issue-reports");
+        let dir = report_dir(root);
         std::fs::create_dir_all(&dir)?;
         let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
         std::fs::write(dir.join(format!("{id}.json")), &body)?;
         reply(out, "201 Created", &format!("{{\"success\":true,\"id\":\"{id}\"}}"))
+    }
+
+    fn report_dir(root: &Path) -> PathBuf {
+        root.parent().unwrap_or(root).join("target").join("issue-reports")
+    }
+
+    /// The raw JSON string literal (quotes included) of `"name": "..."` in a body the page wrote.
+    /// Raw, so it can be copied into the answer without decoding and re-encoding it.
+    fn raw_string<'a>(body: &'a str, name: &str) -> Option<&'a str> {
+        let key = format!("\"{name}\":\"");
+        let start = body.find(&key)? + key.len() - 1;
+        let bytes = body.as_bytes();
+        let mut i = start + 1;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' => i += 2,
+                b'"' => return body.get(start..=i),
+                _ => i += 1,
+            }
+        }
+        None
+    }
+
+    /// The votes file: one `id|address` line per vote, so one address votes once per report.
+    fn votes(dir: &Path) -> Vec<String> {
+        std::fs::read_to_string(dir.join("votes.txt")).unwrap_or_default().lines().map(str::to_string).collect()
+    }
+
+    /// `GET /api/issue-reports`: the reports written so far, most voted first, in the shape the
+    /// deployed function answers with (no context, no screenshot).
+    fn issue_list(out: TcpStream, root: &Path) -> std::io::Result<()> {
+        let dir = report_dir(root);
+        let votes = votes(&dir);
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
+            .map(|d| d.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect())
+            .unwrap_or_default();
+        files.sort();
+        files.reverse();
+        let mut rows: Vec<(usize, String)> = Vec::new();
+        for f in files {
+            let (Some(id), Ok(body)) = (f.file_stem().and_then(|s| s.to_str()), std::fs::read_to_string(&f)) else { continue };
+            let (Some(title), Some(desc)) = (raw_string(&body, "title"), raw_string(&body, "description")) else { continue };
+            let kind = raw_string(&body, "kind").unwrap_or("\"bug\"");
+            let n = votes.iter().filter(|v| v.split('|').next() == Some(id)).count();
+            rows.push((
+                n,
+                format!("{{\"id\":\"{id}\",\"kind\":{kind},\"title\":{title},\"description\":{desc},\"status\":\"open\",\"votes\":{n},\"createdAt\":null,\"screenshotUrl\":null}}"),
+            ));
+        }
+        rows.sort_by_key(|r| std::cmp::Reverse(r.0));
+        let list: Vec<String> = rows.into_iter().map(|r| r.1).collect();
+        reply(out, "200 OK", &format!("{{\"reports\":[{}]}}", list.join(",")))
+    }
+
+    /// `POST /api/issue-reports/vote {"id": "..."}`: one vote per address per report.
+    fn issue_vote(reader: &mut BufReader<TcpStream>, out: TcpStream, length: usize, root: &Path, peer: &str) -> std::io::Result<()> {
+        if length == 0 || length > 1000 {
+            return reply(out, "400 Bad Request", "{\"error\":\"That is not a valid vote.\"}");
+        }
+        let mut body = vec![0u8; length];
+        reader.read_exact(&mut body)?;
+        let text = String::from_utf8_lossy(&body).into_owned();
+        let id = raw_string(&text, "id").map(|s| s.trim_matches('"').to_string()).unwrap_or_default();
+        let dir = report_dir(root);
+        if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) || !dir.join(format!("{id}.json")).is_file() {
+            return reply(out, "400 Bad Request", "{\"error\":\"Unknown issue.\"}");
+        }
+        let mut all = votes(&dir);
+        let line = format!("{id}|{peer}");
+        if !all.contains(&line) {
+            all.push(line);
+            std::fs::write(dir.join("votes.txt"), all.join("\n") + "\n")?;
+        }
+        let n = all.iter().filter(|v| v.split('|').next() == Some(id.as_str())).count();
+        reply(out, "200 OK", &format!("{{\"votes\":{n}}}"))
     }
 
     fn handle(stream: TcpStream, root: &Path) -> std::io::Result<()> {
@@ -249,8 +324,12 @@ mod serve {
         let mut parts = line.split_whitespace();
         let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or("/"));
         let path = target.split(['?', '#']).next().unwrap_or("/");
-        if method == "POST" && path == "/api/issue-reports" {
-            return issue_report(&mut reader, stream, length, root);
+        let peer = stream.peer_addr().map(|a| a.ip().to_string()).unwrap_or_default();
+        match (method, path) {
+            ("POST", "/api/issue-reports") => return issue_report(&mut reader, stream, length, root),
+            ("POST", "/api/issue-reports/vote") => return issue_vote(&mut reader, stream, length, root, &peer),
+            ("GET", "/api/issue-reports") => return issue_list(stream, root),
+            _ => {}
         }
         let rel = Path::new(path.trim_start_matches('/'));
         let safe = rel.components().all(|c| matches!(c, Component::Normal(_)));

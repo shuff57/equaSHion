@@ -25,6 +25,8 @@
 //! | `fillReport(kind, title, description)` | fills the report form (`kind` is `bug`, `quirk` or `enhancement`); false for an unknown kind |
 //! | `submitReport()` | presses Send report (an empty title or description stays on the page with a note) |
 //! | `reportStatus()` | `idle`, `sending`, `sent` or `failed` |
+//! | `reportIssues()` | the public list as `[{id, title, kind, status, votes, voted}]`, most voted first (loaded when the form first opens and after a send) |
+//! | `voteIssue(id)` | presses Vote on an issue; ignored when already voted |
 //! | `paletteTabs()` | the palette's tab titles, in order |
 //! | `setPaletteTab(title)` | selects a palette tab; false when there is no such title |
 //! | `unknownCommands()` | array of the equation's unknown backslash commands |
@@ -49,7 +51,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
 use crate::export::{CopyKind, Data};
-use crate::report::{Kind, Shot, Submission};
+use crate::report::{Issue, Kind, Shot, Status, Submission};
 use crate::theme::{ThemePref, theme_name};
 use crate::{CopyRequest, Outcome, Showcase};
 
@@ -102,7 +104,7 @@ struct WebApp {
 
 impl eframe::App for WebApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let (requests, reports, pick) = match self.shared.try_borrow_mut() {
+        let (requests, reports, pick, list, votes) = match self.shared.try_borrow_mut() {
             Ok(mut s) => {
                 s.ui(ui);
                 if s.report_accepts_images()
@@ -110,9 +112,9 @@ impl eframe::App for WebApp {
                 {
                     s.shot_loaded(shot);
                 }
-                (s.take_requests(), s.take_reports(), s.take_shot_request())
+                (s.take_requests(), s.take_reports(), s.take_shot_request(), s.take_list_request(), s.take_votes())
             }
-            Err(_) => (Vec::new(), Vec::new(), false),
+            Err(_) => (Vec::new(), Vec::new(), false, false, Vec::new()),
         };
         for r in requests {
             let (a, c) = (self.shared.clone(), ui.ctx().clone());
@@ -130,6 +132,18 @@ impl eframe::App for WebApp {
             let (a, c) = (self.shared.clone(), ui.ctx().clone());
             wasm_bindgen_futures::spawn_local(async move {
                 pick_screenshot(a, c).await;
+            });
+        }
+        if list {
+            let (a, c) = (self.shared.clone(), ui.ctx().clone());
+            wasm_bindgen_futures::spawn_local(async move {
+                load_issues(a, c).await;
+            });
+        }
+        for id in votes {
+            let (a, c) = (self.shared.clone(), ui.ctx().clone());
+            wasm_bindgen_futures::spawn_local(async move {
+                cast_vote(a, c, id).await;
             });
         }
     }
@@ -209,6 +223,64 @@ async fn send_report(s: Shared, ctx: egui::Context, r: Submission) {
     };
     if let Ok(mut app) = s.try_borrow_mut() {
         app.report_finished(result);
+    }
+    ctx.request_repaint();
+}
+
+fn text_field(v: &JsValue, name: &str) -> Option<String> {
+    Reflect::get(v, &JsValue::from_str(name)).ok().and_then(|x| x.as_string())
+}
+
+/// One entry of `{reports: [...]}` as an [`Issue`].
+fn issue_from(v: &JsValue) -> Option<Issue> {
+    let votes = Reflect::get(v, &JsValue::from_str("votes")).ok().and_then(|x| x.as_f64()).unwrap_or(0.0);
+    Some(Issue {
+        id: text_field(v, "id")?,
+        kind: Kind::from_value(&text_field(v, "kind")?).unwrap_or(Kind::Bug),
+        title: text_field(v, "title")?,
+        description: text_field(v, "description").unwrap_or_default(),
+        status: Status::from_value(&text_field(v, "status").unwrap_or_default()),
+        votes: votes.max(0.0) as u32,
+        voted: Reflect::get(v, &JsValue::from_str("voted")).ok().and_then(|x| x.as_bool()).unwrap_or(false),
+        screenshot_url: text_field(v, "screenshotUrl"),
+    })
+}
+
+/// The list of every reported issue, with this browser's votes marked.
+async fn fetch_issues() -> Result<Vec<Issue>, String> {
+    let p = report_helper("list", &[]).map_err(|_| "The list could not be requested.".to_string())?;
+    let v = JsFuture::from(p).await.map_err(|_| "The list could not be requested.".to_string())?;
+    if let Some(e) = text_field(&v, "error") {
+        return Err(e);
+    }
+    let reports = Reflect::get(&v, &JsValue::from_str("reports")).map_err(|_| "The list was not understood.".to_string())?;
+    Ok(Array::from(&reports).iter().filter_map(|x| issue_from(&x)).collect())
+}
+
+async fn load_issues(s: Shared, ctx: egui::Context) {
+    let r = fetch_issues().await;
+    if let Ok(mut app) = s.try_borrow_mut() {
+        app.issues_loaded(r);
+    }
+    ctx.request_repaint();
+}
+
+/// Post one vote and tell the app the new total.
+async fn cast_vote(s: Shared, ctx: egui::Context, id: String) {
+    let answer = match report_helper("vote", &[JsValue::from_str(&id)]) {
+        Ok(p) => JsFuture::from(p).await.ok(),
+        Err(_) => None,
+    };
+    let result = match answer {
+        Some(v) => match (text_field(&v, "error"), Reflect::get(&v, &JsValue::from_str("votes")).ok().and_then(|x| x.as_f64())) {
+            (Some(e), _) => Err(e),
+            (None, Some(n)) => Ok(n.max(0.0) as u32),
+            _ => Err("The vote was not understood.".to_string()),
+        },
+        None => Err("The vote could not be sent.".to_string()),
+    };
+    if let Ok(mut app) = s.try_borrow_mut() {
+        app.vote_finished(&id, result);
     }
     ctx.request_repaint();
 }
@@ -476,6 +548,36 @@ fn install_hooks(s: Shared, ctx: egui::Context) -> Result<(), JsValue> {
         true
     });
     set(&obj, "submitReport", f.as_ref())?;
+    f.forget();
+
+    let a = s.clone();
+    let f = Closure::<dyn Fn() -> Array>::new(move || {
+        with(&a, |app| {
+            app.issues()
+                .iter()
+                .map(|i| {
+                    let o = Object::new();
+                    let _ = set(&o, "id", &JsValue::from_str(&i.id));
+                    let _ = set(&o, "title", &JsValue::from_str(&i.title));
+                    let _ = set(&o, "kind", &JsValue::from_str(i.kind.value()));
+                    let _ = set(&o, "status", &JsValue::from_str(i.status.label()));
+                    let _ = set(&o, "votes", &JsValue::from_f64(f64::from(i.votes)));
+                    let _ = set(&o, "voted", &JsValue::from_bool(i.voted));
+                    JsValue::from(o)
+                })
+                .collect::<Array>()
+        })
+    });
+    set(&obj, "reportIssues", f.as_ref())?;
+    f.forget();
+
+    let (a, c) = (s.clone(), ctx.clone());
+    let f = Closure::<dyn Fn(String) -> bool>::new(move |id: String| {
+        with(&a, |app| app.vote(&id));
+        c.request_repaint();
+        true
+    });
+    set(&obj, "voteIssue", f.as_ref())?;
     f.forget();
 
     let a = s.clone();

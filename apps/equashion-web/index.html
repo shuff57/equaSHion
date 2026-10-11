@@ -94,6 +94,42 @@
           return 'The network is unavailable.';
         }
       },
+      // The public list. Resolves to {reports:[...]} (each with `voted` from this browser's
+      // memory) or {error}.
+      list: async function () {
+        try {
+          const r = await fetch('/api/issue-reports', { headers: { accept: 'application/json' } });
+          const data = await r.json().catch(function () { return {}; });
+          if (!r.ok) return { error: data.error || ('The server answered ' + r.status + '.') };
+          const mine = this.voted();
+          return { reports: (data.reports || []).map(function (x) { return Object.assign({}, x, { voted: mine.indexOf(String(x.id)) >= 0 }); }) };
+        } catch (_) {
+          return { error: 'The network is unavailable.' };
+        }
+      },
+      // One vote. Resolves to {votes} or {error}; a counted vote is remembered in this browser.
+      vote: async function (id) {
+        try {
+          const r = await fetch('/api/issue-reports/vote', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: String(id) }),
+          });
+          const data = await r.json().catch(function () { return {}; });
+          if (!r.ok) return { error: data.error || ('The server answered ' + r.status + '.') };
+          const mine = this.voted();
+          if (mine.indexOf(String(id)) < 0) {
+            mine.push(String(id));
+            try { localStorage.setItem('equashion.voted', JSON.stringify(mine)); } catch (_) {}
+          }
+          return { votes: data.votes };
+        } catch (_) {
+          return { error: 'The network is unavailable.' };
+        }
+      },
+      voted: function () {
+        try { return JSON.parse(localStorage.getItem('equashion.voted') || '[]'); } catch (_) { return []; }
+      },
       readFile: function (file) {
         return new Promise(function (resolve) {
           if (!file || !/^image\//.test(file.type)) {

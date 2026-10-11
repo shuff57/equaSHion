@@ -69,6 +69,57 @@ impl Kind {
     }
 }
 
+impl Kind {
+    /// The kind for an API value (`bug`, `quirk`, `enhancement`).
+    pub fn from_value(v: &str) -> Option<Kind> {
+        Kind::ALL.into_iter().find(|k| k.value() == v)
+    }
+}
+
+/// Where a reported issue stands. It is set on GitHub: closed is fixed, closed as not planned is
+/// deferred, the label "in progress" is in progress.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Status {
+    Open,
+    InProgress,
+    Fixed,
+    Deferred,
+}
+
+impl Status {
+    pub fn from_value(v: &str) -> Status {
+        match v {
+            "in_progress" => Status::InProgress,
+            "fixed" => Status::Fixed,
+            "deferred" => Status::Deferred,
+            _ => Status::Open,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Status::Open => "Open",
+            Status::InProgress => "In progress",
+            Status::Fixed => "Fixed",
+            Status::Deferred => "Deferred",
+        }
+    }
+}
+
+/// One entry of the public list.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Issue {
+    pub id: String,
+    pub kind: Kind,
+    pub title: String,
+    pub description: String,
+    pub status: Status,
+    pub votes: u32,
+    /// This browser has already voted for it.
+    pub voted: bool,
+    pub screenshot_url: Option<String>,
+}
+
 /// An attached screenshot.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Shot {
@@ -174,6 +225,15 @@ mod tests {
             page_url: "http://x/".into(),
             app_version: "0.1.0".into(),
         }
+    }
+
+    #[test]
+    fn kinds_and_statuses_read_back_from_api_values() {
+        assert_eq!(Kind::from_value("enhancement"), Some(Kind::Improve));
+        assert_eq!(Kind::from_value("urgent"), None);
+        assert_eq!(Status::from_value("in_progress"), Status::InProgress);
+        assert_eq!(Status::from_value("fixed").label(), "Fixed");
+        assert_eq!(Status::from_value("anything else"), Status::Open);
     }
 
     #[test]

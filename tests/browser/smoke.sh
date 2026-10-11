@@ -65,8 +65,10 @@ check "copy('omml') is OMML with m:f" "eq.setLatex('\\\\frac{a}{b}') && eq.copy(
 check "copy('text') is linear" "eq.copy('text').then(r => r.items['text/plain'] === 'a/b' || r.items)"
 check "copy('image') is a PNG" "eq.copy('image').then(r => { const b = r.items['image/png']; const magic = [137, 80, 78, 71, 13, 10, 26, 10]; return (b instanceof Uint8Array && b.length > 500 && magic.every((v, i) => b[i] === v)) || [typeof b, b && b.length]; })"
 check "copy('svg') downloads an <svg>" "eq.copy('svg').then(r => (r.status === 'downloaded' && r.items['image/svg+xml'].startsWith('<svg')) || [r.status, r.items['image/svg+xml'].slice(0, 40)])"
+# The confirmation on the button only lasts two seconds, so the status is read in the same
+# evaluation as the copy that made it.
+check "copy('svg') leaves copyStatus() downloaded" "eq.copy('svg').then(() => new Promise(r => setTimeout(r, 100))).then(() => { const s = eq.copyStatus(); return (s && s.kind === 'svg' && s.state === 'downloaded') || s; })"
 check "copy rejects an unknown kind" "eq.copy('pdf').then(() => 'resolved', e => String(e).includes('unknown kind'))"
-check "copyStatus()" "(() => { const s = eq.copyStatus(); return (s && s.kind === 'svg' && s.state === 'downloaded') || s; })()"
 
 # A real click on Copy LaTeX: the copy event path runs inside the user gesture. Record what the
 # page hands the clipboard (DataTransfer.setData) without needing clipboard-read permission.
@@ -78,7 +80,7 @@ read -r CX CY <<<"$(eq_rect latex)"
 [ "$CX" != "none" ] || fail "no Copy LaTeX button rect"
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 8
-check "click Copy LaTeX writes text/plain" "(() => { const s = eq.copyStatus(); const w = window.__eqSet; return (s.kind === 'latex' && s.state === 'copied' && w.some(([t, d]) => t === 'text/plain' && d === 'x^2+1')) || [s, w]; })()"
+check "click Copy LaTeX writes text/plain" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = eq.copyStatus(); if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return eq.copyStatus() || {}; })(); const w = window.__eqSet; return (s.kind === 'latex' && s.state === 'copied' && w.some(([t, d]) => t === 'text/plain' && d === 'x^2+1')) || [s, w]; })()"
 check "setLatex for the MathML click" "eq.setLatex('\\\\frac{1}{2}') === '\\\\frac{1}{2}'"
 check "open the format menu" "eq.showMoreCopy(true) === true"
 frames 4
@@ -91,7 +93,7 @@ read -r CX CY <<<"$(eq_rect mathml)"
 pw --raw eval "() => { window.__eqSet = []; return true; }" >/dev/null
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 8
-check "click Copy MathML writes MathML as text and HTML" "(() => { const s = eq.copyStatus(); const w = window.__eqSet; const t = w.find(x => x[0] === 'text/plain'), h = w.find(x => x[0] === 'text/html'); return (s.kind === 'mathml' && s.state === 'copied' && t && t[1].startsWith('<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">') && t[1].includes('<mfrac><mn>1</mn><mn>2</mn></mfrac>') && h && h[1].includes('<!--StartFragment-->' + t[1] + '<!--EndFragment-->')) || [s, w.map(x => x[0])]; })()"
+check "click Copy MathML writes MathML as text and HTML" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = eq.copyStatus(); if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return eq.copyStatus() || {}; })(); const w = window.__eqSet; const t = w.find(x => x[0] === 'text/plain'), h = w.find(x => x[0] === 'text/html'); return (s.kind === 'mathml' && s.state === 'copied' && t && t[1].startsWith('<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">') && t[1].includes('<mfrac><mn>1</mn><mn>2</mn></mfrac>') && h && h[1].includes('<!--StartFragment-->' + t[1] + '<!--EndFragment-->')) || [s, w.map(x => x[0])]; })()"
 # The second row: OMML, text and SVG are behind More.
 check "OMML hidden until the menu opens" "eq.copyButtonRect('omml') === null || eq.copyButtonRect('omml')"
 check "showMoreCopy(true)" "eq.showMoreCopy(true) === true"
@@ -105,7 +107,7 @@ read -r CX CY <<<"$(eq_rect omml)"
 pw --raw eval "() => { window.__eqSet = []; return true; }" >/dev/null
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 8
-check "click Copy OMML writes OMML text" "(() => { const s = eq.copyStatus(); const w = window.__eqSet; return (s.kind === 'omml' && s.state === 'copied' && w.length === 1 && w[0][0] === 'text/plain' && w[0][1].startsWith('<m:oMath xmlns:m=')) || [s, w]; })()"
+check "click Copy OMML writes OMML text" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = eq.copyStatus(); if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return eq.copyStatus() || {}; })(); const w = window.__eqSet; return (s.kind === 'omml' && s.state === 'copied' && w.length === 1 && w[0][0] === 'text/plain' && w[0][1].startsWith('<m:oMath xmlns:m=')) || [s, w]; })()"
 check "open the menu for image" "eq.showMoreCopy(true) === true"
 frames 4
 read -r CX CY <<<"$(eq_rect image)"
@@ -179,6 +181,10 @@ check "close disclosures" "eq.setPaletteTab('Structures') && eq.setDisclosures(f
 check "report form opens" "eq.setDisclosures(false, false, true) && eq.fillReport('nonsense', 'a', 'b') === false && eq.reportStatus() === 'idle'"
 check "an empty report is not sent" "eq.fillReport('bug', '', '') && eq.submitReport() && (await new Promise(r => setTimeout(r, 300)), eq.reportStatus() === 'idle')"
 check "a report is sent" "eq.fillReport('enhancement', 'Smoke test report', 'Sent by tests/browser/smoke.sh.') && eq.submitReport() && eq.reportStatus() === 'sending' && (await (async () => { for (let i = 0; i < 50; i++) { if (eq.reportStatus() !== 'sending') break; await new Promise(r => setTimeout(r, 100)); } return eq.reportStatus(); })()) === 'sent'"
+# The public list: the new report is in it (the page refreshes the list after a send), and a
+# vote counts once however many times it is pressed.
+check "the sent report is listed" "(await (async () => { for (let i = 0; i < 50; i++) { if (eq.reportIssues().some(x => x.title === 'Smoke test report')) return true; await new Promise(r => setTimeout(r, 100)); } return false; })()) || eq.reportIssues().map(x => x.title)"
+check "a vote counts once" "(async () => { const newest = () => eq.reportIssues().filter(x => x.title === 'Smoke test report').sort((a, b) => Number(b.id) - Number(a.id))[0]; const id = newest().id; const before = newest().votes; eq.voteIssue(id); for (let i = 0; i < 50 && !newest().voted; i++) await new Promise(r => setTimeout(r, 100)); eq.voteIssue(id); await new Promise(r => setTimeout(r, 300)); const after = newest(); return (after.voted && after.votes === before + 1) || JSON.stringify([before, after]); })()"
 frames 8
 pw screenshot --filename "$OUT/report.png" >/dev/null
 check "close the report form" "eq.setDisclosures(false, false, false)"

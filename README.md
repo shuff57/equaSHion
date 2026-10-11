@@ -113,8 +113,9 @@ canvas. Every palette face is rendered by equashion-render, not by egui's fonts.
 - **Report an issue**: a disclosure under "How to type". Pick Bug (doesn't work), Quirk (works,
   but picky) or Improve (wish it had), add a title (100 characters) and a description (2000), and
   optionally attach a screenshot (a file or a pasted image, 1 MB at most). No sign-in. The report
-  carries the equation in the editor, the browser and the page address. See
-  [docs/issue-reports.md](docs/issue-reports.md) for where reports go.
+  carries the equation in the editor, the browser and the page address. Under the form, **Reported
+  so far** lists what others reported with its status, and each entry has a Vote button. Reports
+  become GitHub issues; see [docs/issue-reports.md](docs/issue-reports.md).
 
 ### What each Copy button puts on the clipboard
 
