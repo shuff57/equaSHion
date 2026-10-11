@@ -12,6 +12,7 @@ use equashion_math::to_latex;
 use crate::corpus::{self, Row};
 use crate::export::{self, CopyKind, ImportError, Payload};
 use crate::palette::{self, Item, Palette as SymbolPalette};
+use crate::report::{self, DESC_MAX, Kind, Shot, Submission, TITLE_MAX};
 use crate::selftest::{self, Report};
 use crate::theme::{self, Palette, R_CONTROL, R_PANEL, S4, S8, S12, S16, S24, S32, T_BODY, T_CAPTION, T_H2, T_MONO, ThemePref};
 
@@ -58,6 +59,9 @@ pub const HOW_TO_TYPE: &[(&str, &str)] = &[
 /// the README); Word is named with the paste route to try, not as verified.
 pub const COPY_GUIDE: &str = "LaTeX goes into Overleaf or Markdown math, MathML pastes as an equation in ONLYOFFICE (in Word, try Paste Special > Unformatted Text), and the image pastes anywhere.";
 
+/// The disclosure that opens the report form.
+pub const REPORT_LABEL: &str = "Report an issue";
+
 /// The disclosure that opens the paste-in field.
 pub const PASTE_LABEL: &str = "Paste LaTeX, MathML or OMML";
 
@@ -100,6 +104,63 @@ struct CopyStatus {
     select_fallback: bool,
 }
 
+/// Where the report form is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ReportStatus {
+    Idle,
+    Sending,
+    Sent,
+    Failed(String),
+}
+
+/// The "Report an issue" form and what is waiting for the browser shell.
+struct ReportForm {
+    open: bool,
+    kind: Kind,
+    title: String,
+    description: String,
+    shot: Option<Shot>,
+    /// The file picker was asked for and has not answered.
+    picking: bool,
+    /// The shell has to open the file picker.
+    want_pick: bool,
+    /// A message about the form or the screenshot, in words.
+    note: Option<String>,
+    status: ReportStatus,
+    outbox: Vec<Submission>,
+    /// The browser's user agent and the page's address, set by the shell.
+    browser: String,
+    page_url: String,
+}
+
+impl ReportForm {
+    fn new() -> Self {
+        ReportForm {
+            open: false,
+            kind: Kind::Bug,
+            title: String::new(),
+            description: String::new(),
+            shot: None,
+            picking: false,
+            want_pick: false,
+            note: None,
+            status: ReportStatus::Idle,
+            outbox: Vec::new(),
+            browser: String::new(),
+            page_url: String::new(),
+        }
+    }
+
+    /// Back to a clean slate for the next report (the open state stays).
+    fn clear(&mut self) {
+        self.kind = Kind::Bug;
+        self.title.clear();
+        self.description.clear();
+        self.shot = None;
+        self.note = None;
+    }
+}
+
 /// The whole page.
 pub struct Showcase {
     pub editor: EquationEditor,
@@ -122,6 +183,7 @@ pub struct Showcase {
     import_error: Option<&'static str>,
     howto_open: bool,
     about_open: bool,
+    issue: ReportForm,
     /// The second Copy row (OMML, text, SVG) is shown.
     more_copy: bool,
     /// The format the big Copy button writes.
@@ -162,6 +224,7 @@ impl Showcase {
             import_error: None,
             howto_open: false,
             about_open: false,
+            issue: ReportForm::new(),
             more_copy: false,
             copy_kind: CopyKind::Latex,
             copy_rects: Vec::new(),
@@ -365,10 +428,107 @@ impl Showcase {
         self.symbols.tab_titles()
     }
 
-    /// Open or close the paste-in and "How to type" disclosures.
-    pub fn set_disclosures(&mut self, import: bool, howto: bool) {
+    /// Open or close the paste-in, "How to type" and "Report an issue" disclosures.
+    pub fn set_disclosures(&mut self, import: bool, howto: bool, report: bool) {
         self.import_open = import;
         self.howto_open = howto;
+        self.issue.open = report;
+    }
+
+    /// Fill in the report form (the browser tests and the native tests do this).
+    pub fn fill_report(&mut self, kind: Kind, title: &str, description: &str) {
+        self.issue.kind = kind;
+        self.issue.title = title.to_string();
+        self.issue.description = description.to_string();
+    }
+
+    /// The page's address and the browser's user agent, sent with each report.
+    pub fn set_report_context(&mut self, browser: &str, page_url: &str) {
+        self.issue.browser = browser.to_string();
+        self.issue.page_url = page_url.to_string();
+    }
+
+    /// Reports waiting to be sent (the shell posts them and answers with [`Self::report_finished`]).
+    pub fn take_reports(&mut self) -> Vec<Submission> {
+        std::mem::take(&mut self.issue.outbox)
+    }
+
+    /// The report form asked for the file picker (true once per click).
+    pub fn take_shot_request(&mut self) -> bool {
+        std::mem::take(&mut self.issue.want_pick)
+    }
+
+    /// The file picker answered, or an image was pasted.
+    pub fn shot_loaded(&mut self, result: Result<Shot, String>) {
+        self.issue.picking = false;
+        match result {
+            Ok(s) => match report::shot_problem(&s.data_url) {
+                None => {
+                    self.issue.shot = Some(s);
+                    self.issue.note = None;
+                }
+                Some(why) => self.issue.note = Some(why.to_string()),
+            },
+            // An empty reason is a cancelled picker: nothing to say.
+            Err(why) => self.issue.note = (!why.is_empty()).then_some(why),
+        }
+    }
+
+    /// A report was sent (`Ok`) or could not be (`Err` with the reason).
+    pub fn report_finished(&mut self, result: Result<(), String>) {
+        match result {
+            Ok(()) => {
+                self.issue.status = ReportStatus::Sent;
+                self.issue.clear();
+            }
+            Err(why) => self.issue.status = ReportStatus::Failed(why),
+        }
+    }
+
+    /// `idle`, `sending`, `sent` or `failed`.
+    pub fn report_status(&self) -> &'static str {
+        match self.issue.status {
+            ReportStatus::Idle => "idle",
+            ReportStatus::Sending => "sending",
+            ReportStatus::Sent => "sent",
+            ReportStatus::Failed(_) => "failed",
+        }
+    }
+
+    /// Send the form: checks it, then queues it for the shell. A form with no title or no
+    /// description stays on the page with a note.
+    pub fn submit_report(&mut self) {
+        if self.issue.status == ReportStatus::Sending {
+            return;
+        }
+        if let Some(why) = report::problem(&self.issue.title, &self.issue.description) {
+            self.issue.note = Some(why.to_string());
+            return;
+        }
+        let latex = self.latex();
+        let r = &mut self.issue;
+        r.note = None;
+        r.status = ReportStatus::Sending;
+        r.outbox.push(Submission {
+            kind: r.kind,
+            title: r.title.clone(),
+            description: r.description.clone(),
+            screenshot: r.shot.as_ref().map(|s| s.data_url.clone()),
+            latex,
+            browser: r.browser.clone(),
+            page_url: r.page_url.clone(),
+            app_version: env!("CARGO_PKG_VERSION").to_string(),
+        });
+    }
+
+    /// The report form is open.
+    pub fn report_open(&self) -> bool {
+        self.issue.open
+    }
+
+    /// The report form is waiting for an image to be pasted or picked.
+    pub fn report_accepts_images(&self) -> bool {
+        self.issue.open && self.issue.shot.is_none()
     }
 
     /// The format drop-down next to the Copy button is open.
@@ -493,6 +653,14 @@ impl Showcase {
         if self.howto_open {
             ui.add_space(S8);
             how_to_type(ui, p);
+        }
+        ui.add_space(S16);
+        if palette::disclosure(ui, p, REPORT_LABEL, self.issue.open).clicked() {
+            self.issue.open = !self.issue.open;
+        }
+        if self.issue.open {
+            ui.add_space(S8);
+            panel(ui, p, |ui| self.report_panel(ui, p));
         }
         ui.add_space(S32 + S16);
         self.footer(ui, p);
@@ -722,6 +890,95 @@ impl Showcase {
         } else if close {
             self.status = None;
             self.focus_editor(ui);
+        }
+    }
+
+    /// The "Report an issue" form: kind, title, description, an optional screenshot and Send.
+    fn report_panel(&mut self, ui: &mut Ui, p: &Palette) {
+        let r = &mut self.issue;
+        let sending = r.status == ReportStatus::Sending;
+        ui.add(
+            egui::Label::new(
+                RichText::new(
+                    "Something wrong or missing? Tell us. You do not need an account. The report includes the equation in the editor and your browser, so it can be reproduced.",
+                )
+                .size(T_BODY)
+                .color(p.muted),
+            )
+            .wrap(),
+        );
+        ui.add_space(S12);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = S4;
+            for k in Kind::ALL {
+                if segment(ui, p, r.kind == k, k.label(), k.hint()).clicked() {
+                    r.kind = k;
+                }
+            }
+            ui.add_space(S8);
+            ui.label(RichText::new(r.kind.hint()).size(T_BODY).color(p.muted));
+        });
+        ui.add_space(S8);
+        ui.add(
+            egui::TextEdit::singleline(&mut r.title)
+                .id_salt("equashion-report-title")
+                .font(FontId::proportional(T_BODY))
+                .desired_width(f32::INFINITY)
+                .char_limit(TITLE_MAX)
+                .margin(Margin::same(S8 as i8))
+                .hint_text(r.kind.title_hint()),
+        );
+        ui.add_space(S8);
+        ui.add(
+            egui::TextEdit::multiline(&mut r.description)
+                .id_salt("equashion-report-description")
+                .font(FontId::proportional(T_BODY))
+                .desired_width(f32::INFINITY)
+                .desired_rows(5)
+                .char_limit(DESC_MAX)
+                .margin(Margin::same(S8 as i8))
+                .hint_text(r.kind.body_hint()),
+        );
+        ui.add_space(S8);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(S8, S8);
+            match r.shot.clone() {
+                Some(s) => {
+                    ui.label(RichText::new(format!("Screenshot attached: {}", s.name)).size(T_BODY).color(p.text));
+                    if main_button(ui, p, "Remove screenshot", false).clicked() {
+                        r.shot = None;
+                    }
+                }
+                None => {
+                    let busy = r.picking;
+                    let label = if busy { "Attaching..." } else { "Attach screenshot" };
+                    if ui.add_enabled_ui(!busy, |ui| main_button(ui, p, label, false)).inner.clicked() {
+                        r.picking = true;
+                        r.want_pick = true;
+                    }
+                    ui.label(RichText::new("or paste one (Ctrl+V). Optional.").size(T_BODY).color(p.muted));
+                }
+            }
+        });
+        ui.add_space(S8);
+        let mut send = false;
+        ui.horizontal(|ui| {
+            let label = if sending { "Sending..." } else { "Send report" };
+            if ui.add_enabled_ui(!sending, |ui| main_button(ui, p, label, true)).inner.clicked() {
+                send = true;
+            }
+            let (text, color) = match (&r.note, &r.status) {
+                (Some(n), _) => (n.clone(), p.error),
+                (None, ReportStatus::Sent) => ("Thank you! Your report has been sent.".to_string(), p.accent_text),
+                (None, ReportStatus::Failed(why)) => (format!("Could not send the report: {why} Try again."), p.error),
+                _ => (String::new(), p.muted),
+            };
+            if !text.is_empty() {
+                ui.add(egui::Label::new(RichText::new(text).size(T_BODY).color(color)).wrap());
+            }
+        });
+        if send {
+            self.submit_report();
         }
     }
 

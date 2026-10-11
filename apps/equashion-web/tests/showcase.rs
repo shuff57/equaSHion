@@ -23,6 +23,13 @@ fn harness() -> Harness<'static, Showcase> {
     harness_at(1280.0)
 }
 
+/// A window tall enough for the whole page with the report form open.
+fn tall_harness() -> Harness<'static, Showcase> {
+    let mut h = Harness::builder().with_size(vec2(1280.0, 2600.0)).build_ui_state(|ui, s: &mut Showcase| s.ui(ui), Showcase::new());
+    h.run();
+    h
+}
+
 #[test]
 fn one_view_no_tabs() {
     let h = harness();
@@ -452,4 +459,87 @@ fn visible_strings_have_no_long_dashes() {
             assert!(!line.contains('\u{2014}') && !line.contains('\u{2013}'), "line {}: {line}", n + 1);
         }
     }
+}
+
+#[test]
+fn the_report_form_sends_what_was_typed_and_needs_no_sign_in() {
+    use equashion_web::{REPORT_LABEL, ReportKind, Shot};
+    let mut h = tall_harness();
+    assert!(!h.state().report_open());
+    h.get_by_label(REPORT_LABEL).click();
+    h.run();
+    assert!(h.state().report_open());
+    for kind in ["Bug", "Quirk", "Improve"] {
+        h.get_by_label(kind);
+    }
+    h.get_by_label("Attach screenshot");
+
+    // Nothing typed: the form stays, with a note, and nothing is queued.
+    h.get_by_label("Send report").click();
+    h.run();
+    h.get_by_label("Add a short title.");
+    assert!(h.state_mut().take_reports().is_empty());
+    assert_eq!(h.state().report_status(), "idle");
+
+    // Fill it in, attach a screenshot, send.
+    h.get_by_label("Quirk").click();
+    h.run();
+    h.state_mut().fill_report(ReportKind::Quirk, "Tab skips a cell", "In a 3x3 matrix, Tab goes from a1 to c1.");
+    h.state_mut().set_report_context("TestBrowser/1", "http://127.0.0.1/");
+    h.state_mut().shot_loaded(Ok(Shot { name: "shot.png".into(), data_url: "data:image/png;base64,AAAA".into() }));
+    h.run();
+    h.get_by_label_contains("Screenshot attached: shot.png");
+    h.get_by_label("Send report").click();
+    h.run();
+    assert_eq!(h.state().report_status(), "sending");
+    let sent = h.state_mut().take_reports();
+    assert_eq!(sent.len(), 1);
+    let r = &sent[0];
+    assert_eq!((r.kind, r.title.as_str()), (ReportKind::Quirk, "Tab skips a cell"));
+    assert_eq!(r.screenshot.as_deref(), Some("data:image/png;base64,AAAA"));
+    assert_eq!((r.browser.as_str(), r.page_url.as_str()), ("TestBrowser/1", "http://127.0.0.1/"));
+    assert_eq!(r.latex, h.state().latex(), "the equation in the editor goes with the report");
+    assert!(r.to_json().contains("\"kind\":\"quirk\""));
+
+    // While sending, a second press queues nothing; the answer clears the form.
+    h.state_mut().submit_report();
+    assert!(h.state_mut().take_reports().is_empty());
+    h.state_mut().report_finished(Ok(()));
+    h.run();
+    h.get_by_label_contains("Thank you");
+    assert_eq!(h.state().report_status(), "sent");
+    h.get_by_label("Attach screenshot");
+}
+
+#[test]
+fn a_failed_report_keeps_the_text_so_it_can_be_sent_again() {
+    use equashion_web::{REPORT_LABEL, ReportKind};
+    let mut h = tall_harness();
+    h.get_by_label(REPORT_LABEL).click();
+    h.run();
+    h.state_mut().fill_report(ReportKind::Bug, "Crash", "It crashed.");
+    h.state_mut().submit_report();
+    assert_eq!(h.state_mut().take_reports().len(), 1);
+    h.state_mut().report_finished(Err("The network is unavailable.".into()));
+    h.run();
+    assert_eq!(h.state().report_status(), "failed");
+    h.get_by_label_contains("The network is unavailable.");
+    h.state_mut().submit_report();
+    assert_eq!(h.state_mut().take_reports().len(), 1, "the same text is still there");
+}
+
+#[test]
+fn only_small_images_attach_to_a_report() {
+    use equashion_web::{REPORT_LABEL, Shot};
+    let mut h = tall_harness();
+    h.get_by_label(REPORT_LABEL).click();
+    h.run();
+    h.state_mut().shot_loaded(Ok(Shot { name: "page.html".into(), data_url: "data:text/html;base64,AAAA".into() }));
+    h.run();
+    h.get_by_label("Screenshots must be images (PNG, JPEG, GIF or WebP).");
+    h.get_by_label("Attach screenshot");
+    // A cancelled picker says nothing.
+    h.state_mut().shot_loaded(Err(String::new()));
+    h.run();
+    assert!(h.query_by_label("Screenshots must be images (PNG, JPEG, GIF or WebP).").is_none());
 }

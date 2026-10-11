@@ -73,6 +73,67 @@
         }
       },
     };
+    // The "Report an issue" form (called from src/web.rs). send(json) POSTs a report to this
+    // origin and resolves to 'sent' or a reason in words. pickScreenshot() opens the file picker
+    // and resolves to {name, dataUrl}, {error} or null (cancelled). An image pasted while the
+    // form is open is kept in `pasted` for the page to take.
+    window.equashionReport = {
+      pasted: null,
+      send: async function (json) {
+        try {
+          const r = await fetch('/api/issue-reports', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: json,
+          });
+          if (r.ok) return 'sent';
+          let why = '';
+          try { why = (await r.json()).error || ''; } catch (_) {}
+          return why || ('The server answered ' + r.status + '.');
+        } catch (_) {
+          return 'The network is unavailable.';
+        }
+      },
+      readFile: function (file) {
+        return new Promise(function (resolve) {
+          if (!file || !/^image\//.test(file.type)) {
+            resolve({ error: 'Screenshots must be images (PNG, JPEG, GIF or WebP).' });
+            return;
+          }
+          const fr = new FileReader();
+          fr.onload = function () { resolve({ name: file.name || 'pasted image', dataUrl: String(fr.result) }); };
+          fr.onerror = function () { resolve({ error: 'That image could not be read.' }); };
+          fr.readAsDataURL(file);
+        });
+      },
+      pickScreenshot: function () {
+        const self = this;
+        return new Promise(function (resolve) {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.accept = 'image/png,image/jpeg,image/gif,image/webp';
+          input.style.display = 'none';
+          input.addEventListener('change', function () {
+            const f = input.files && input.files[0];
+            input.remove();
+            resolve(f ? self.readFile(f) : null);
+          });
+          input.addEventListener('cancel', function () { input.remove(); resolve(null); });
+          document.body.appendChild(input);
+          input.click();
+        });
+      },
+    };
+    window.addEventListener('paste', function (e) {
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      for (const it of items) {
+        if (it.type && it.type.indexOf('image/') === 0) {
+          const f = it.getAsFile();
+          if (f) window.equashionReport.readFile(f).then(function (v) { window.equashionReport.pasted = v; });
+          return;
+        }
+      }
+    }, true);
   </script>
 </head>
 <body>

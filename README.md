@@ -110,6 +110,11 @@ canvas. Every palette face is rendered by equashion-render, not by egui's fonts.
   (each line is checked against the editor in `apps/equashion-web/tests/showcase.rs`).
 - **Footer**: the MathLive credit and **About and licences**, which opens a panel with what it
   is, credits, the licence and known limits.
+- **Report an issue**: a disclosure under "How to type". Pick Bug (doesn't work), Quirk (works,
+  but picky) or Improve (wish it had), add a title (100 characters) and a description (2000), and
+  optionally attach a screenshot (a file or a pasted image, 1 MB at most). No sign-in. The report
+  carries the equation in the editor, the browser and the page address. See
+  [docs/issue-reports.md](docs/issue-reports.md) for where reports go.
 
 ### What each Copy button puts on the clipboard
 

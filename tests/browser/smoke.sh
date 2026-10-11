@@ -158,7 +158,7 @@ shot() {
     pw screenshot --filename "$OUT/$name.png" >/dev/null
     python3 -I "$HERE/check_png.py" "$OUT/$name.png" "$theme" || fail "$name screenshot looks blank or has the wrong theme"
 }
-check "closed disclosures" "eq.setDisclosures(false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
+check "closed disclosures" "eq.setDisclosures(false, false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
 for width in 1280 700; do
     pw resize "$width" 900 >/dev/null
     for theme in light dark; do
@@ -166,14 +166,22 @@ for width in 1280 700; do
     done
 done
 # Everything open, tall window: the whole page down to the About panel.
-check "open disclosures" "eq.setDisclosures(true, true) && eq.setPaletteTab('Functions') && eq.showAbout(true) && eq.showMoreCopy(true)"
+check "open disclosures" "eq.setDisclosures(true, true, true) && eq.setPaletteTab('Functions') && eq.showAbout(true) && eq.showMoreCopy(true)"
 for width in 1280 700; do
     pw resize "$width" 2900 >/dev/null
     for theme in light dark; do
         shot "open-$theme-$width" "$theme"
     done
 done
-check "close disclosures" "eq.setPaletteTab('Structures') && eq.setDisclosures(false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
+check "close disclosures" "eq.setPaletteTab('Structures') && eq.setDisclosures(false, false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
+# The report form: an empty form is refused on the page, a filled one is posted to this origin
+# (xtask serve writes it under target/issue-reports) and the page says so. No sign-in anywhere.
+check "report form opens" "eq.setDisclosures(false, false, true) && eq.fillReport('nonsense', 'a', 'b') === false && eq.reportStatus() === 'idle'"
+check "an empty report is not sent" "eq.fillReport('bug', '', '') && eq.submitReport() && (await new Promise(r => setTimeout(r, 300)), eq.reportStatus() === 'idle')"
+check "a report is sent" "eq.fillReport('enhancement', 'Smoke test report', 'Sent by tests/browser/smoke.sh.') && eq.submitReport() && eq.reportStatus() === 'sending' && (await (async () => { for (let i = 0; i < 50; i++) { if (eq.reportStatus() !== 'sending') break; await new Promise(r => setTimeout(r, 100)); } return eq.reportStatus(); })()) === 'sent'"
+frames 8
+pw screenshot --filename "$OUT/report.png" >/dev/null
+check "close the report form" "eq.setDisclosures(false, false, false)"
 pw resize 1280 900 >/dev/null
 check "setTheme(system)" "eq.setTheme('system') && eq.themePreference() === 'system' || eq.themePreference()"
 check "still on the editor with an equation" "eq.activeTab() === 'editor' && eq.latex().length > 0"

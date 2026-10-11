@@ -8,6 +8,7 @@
 pub mod corpus;
 pub mod export;
 pub mod palette;
+pub mod report;
 pub mod selftest;
 mod showcase;
 pub mod theme;
@@ -16,5 +17,6 @@ pub mod theme;
 pub mod web;
 
 pub use export::CopyKind;
-pub use showcase::{COPY_GUIDE, CREDIT, CopyRequest, EXAMPLES, HOW_TO_TYPE, MATHLIVE_URL, Outcome, PASTE_LABEL, Showcase, TAGLINE};
+pub use report::{Kind as ReportKind, Shot, Submission};
+pub use showcase::{COPY_GUIDE, CREDIT, CopyRequest, EXAMPLES, HOW_TO_TYPE, MATHLIVE_URL, Outcome, PASTE_LABEL, REPORT_LABEL, Showcase, TAGLINE};
 pub use theme::ThemePref;

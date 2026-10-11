@@ -166,7 +166,7 @@ fn cmd_smoke() -> Result<(), String> {
 
 /// A minimal static file server for `dist/` (std only, one thread per connection).
 mod serve {
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::path::{Component, Path, PathBuf};
 
@@ -197,18 +197,61 @@ mod serve {
         }
     }
 
+    /// Biggest accepted report body, bytes (a 1 MB screenshot as base64 plus the text).
+    const REPORT_MAX: usize = 2_000_000;
+
+    fn reply(mut out: TcpStream, status: &str, body: &str) -> std::io::Result<()> {
+        let head = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        out.write_all(head.as_bytes())?;
+        out.write_all(body.as_bytes())?;
+        out.flush()
+    }
+
+    /// `POST /api/issue-reports` for local runs: the report is written to
+    /// `target/issue-reports/<millis>.json` (next to `dist/`'s parent), nothing is sent anywhere.
+    /// The deployed site answers this path with `functions/api/issue-reports.js`.
+    fn issue_report(reader: &mut BufReader<TcpStream>, out: TcpStream, length: usize, root: &Path) -> std::io::Result<()> {
+        if length == 0 || length > REPORT_MAX {
+            return reply(out, "400 Bad Request", "{\"error\":\"The report is empty or too large.\"}");
+        }
+        let mut body = vec![0u8; length];
+        reader.read_exact(&mut body)?;
+        let text = String::from_utf8_lossy(&body);
+        // The same minimum the deployed function enforces; it parses the JSON properly.
+        if !text.trim_start().starts_with('{') || !text.contains("\"title\"") || !text.contains("\"description\"") {
+            return reply(out, "400 Bad Request", "{\"error\":\"That does not look like a report.\"}");
+        }
+        let dir = root.parent().unwrap_or(root).join("target").join("issue-reports");
+        std::fs::create_dir_all(&dir)?;
+        let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
+        std::fs::write(dir.join(format!("{id}.json")), &body)?;
+        reply(out, "201 Created", &format!("{{\"success\":true,\"id\":\"{id}\"}}"))
+    }
+
     fn handle(stream: TcpStream, root: &Path) -> std::io::Result<()> {
         let mut reader = BufReader::new(stream.try_clone()?);
         let mut line = String::new();
         reader.read_line(&mut line)?;
-        // Drain the headers.
+        // Drain the headers, keeping the body length.
         let mut h = String::new();
+        let mut length = 0usize;
         while reader.read_line(&mut h)? > 2 {
+            if let Some((k, v)) = h.split_once(':')
+                && k.eq_ignore_ascii_case("content-length")
+            {
+                length = v.trim().parse().unwrap_or(0);
+            }
             h.clear();
         }
         let mut parts = line.split_whitespace();
         let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or("/"));
         let path = target.split(['?', '#']).next().unwrap_or("/");
+        if method == "POST" && path == "/api/issue-reports" {
+            return issue_report(&mut reader, stream, length, root);
+        }
         let rel = Path::new(path.trim_start_matches('/'));
         let safe = rel.components().all(|c| matches!(c, Component::Normal(_)));
         let mut file = root.join(rel);
