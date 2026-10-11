@@ -1,0 +1,10 @@
+- generic [ref=e1]:
+  - textbox [ref=e3]
+  - button "Buy me a coffee" [ref=e4] [cursor=pointer]
+  - generic:
+    - button "Report a Bug" [ref=e5] [cursor=pointer]
+    - button "Reported issues" [ref=e6] [cursor=pointer]
+  - generic:
+    - iframe
+  - generic:
+    - img "Buy Me a Coffee"

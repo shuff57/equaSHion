@@ -1,0 +1,9 @@
+[       9ms] [WARNING] The `integrity` attribute is currently ignored for preload destinations that do not support subresource integrity. See https://crbug.com/981419 for more information @ http://127.0.0.1:8781/:87
+[      79ms] [INFO] [equashion_web::web] equashion-web/src/web.rs:411: equashion: window.equashion hooks installed @ http://127.0.0.1:8781/equashion-web-d0d3c013339f45c1.js:616
+[      80ms] [INFO] [eframe::web::web_runner] eframe-0.36.2/src/web/web_runner.rs:94: event handlers installed. @ http://127.0.0.1:8781/equashion-web-d0d3c013339f45c1.js:616
+[      81ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:8781/favicon.ico:0
+[     178ms] [WARNING] [eframe::web::app_runner] eframe-0.36.2/src/web/app_runner.rs:337: Unhandled egui viewport command: SetTheme(SystemDefault) - not implemented in web backend @ http://127.0.0.1:8781/equashion-web-d0d3c013339f45c1.js:1212
+[     242ms] [WARNING] [.WebGL-0x151c000fe000]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels @ http://127.0.0.1:8781/:0
+[     269ms] [WARNING] [.WebGL-0x151c000fe000]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels @ http://127.0.0.1:8781/:0
+[     290ms] [WARNING] [.WebGL-0x151c000fe000]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels @ http://127.0.0.1:8781/:0
+[     525ms] [WARNING] [.WebGL-0x151c000fe000]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat) @ http://127.0.0.1:8781/:0
