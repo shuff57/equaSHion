@@ -185,7 +185,7 @@ fn the_palette_tabs_group_the_buttons_by_context() {
     h.state_mut().set_latex("");
     h.run();
     // Every tab is on the bar; only the first tab's groups are drawn.
-    for t in ["Structures", "Greek", "Operators", "Relations", "Logic and sets", "Arrows", "Functions"] {
+    for t in ["Structures", "Greek letters", "Special symbols", "Relations", "Math operations", "Arrows", "Functions"] {
         h.get_by_label(t);
     }
     for g in ["Fractions and roots", "Scripts", "Large operators", "Brackets", "Matrices and cases", "Accents"] {
@@ -197,7 +197,7 @@ fn the_palette_tabs_group_the_buttons_by_context() {
     assert_eq!(h.state().latex(), r"\frac{}{}");
     h.state_mut().set_latex("");
     h.run();
-    h.get_by_label("Greek").click();
+    h.get_by_label("Greek letters").click();
     h.run();
     assert!(h.query_by_label("Fraction").is_none());
     for g in ["Lowercase", "Uppercase"] {

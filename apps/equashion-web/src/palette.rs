@@ -1,4 +1,5 @@
-//! The page's symbol palette: a tab bar above the editor (Structures, Greek, Operators, ...),
+//! The page's symbol palette: a tab bar above the editor (Structures, Greek letters, ... in the
+//! order of Google Docs' equation toolbar),
 //! each tab a few labelled groups of large buttons. Every face is laid out and rasterised by
 //! equashion-render from the bundled fonts (never egui's fonts), tinted with the theme's text
 //! colour. A button inserts at the editor's caret through `equashion_math::Editor`.
@@ -130,13 +131,13 @@ pub fn tabs() -> Vec<Tab> {
             ],
         },
         Tab {
-            title: "Greek", groups: vec![sym("Lowercase", "αβγδεζηθικλμνξοπρστυφχψω"), sym("Uppercase", "ΓΔΘΛΞΠΣΦΨΩ")]
+            title: "Greek letters", groups: vec![sym("Lowercase", "αβγδεζηθικλμνξοπρστυφχψω"), sym("Uppercase", "ΓΔΘΛΞΠΣΦΨΩ")]
         },
-        Tab { title: "Operators", groups: vec![sym("Arithmetic", "±∓×÷·∘∗"), sym("Calculus", "∞∂∇°′″")] },
-        Tab { title: "Relations", groups: vec![sym("Equality", "≠≈≡≅∼∝"), sym("Order", "≤≥≪≫≺≻")] },
+        Tab { title: "Special symbols", groups: vec![sym("Calculus", "∞∂∇°′″"), sym("Logic", "∀∃∅∴∵"), sym("Dots", "…⋯")] },
         Tab {
-            title: "Logic and sets", groups: vec![sym("Logic", "∧∨¬∀∃∴∵"), sym("Sets", "∅∪∩∈∉⊂⊆⊃⊇"), sym("Dots", "…⋯")]
+            title: "Relations", groups: vec![sym("Equality", "≠≈≡≅∼∝"), sym("Order", "≤≥≪≫≺≻"), sym("Membership and subsets", "∈∉⊂⊆⊃⊇")]
         },
+        Tab { title: "Math operations", groups: vec![sym("Arithmetic", "±∓×÷·∘∗"), sym("Sets and logic", "∪∩∧∨¬")] },
         Tab { title: "Arrows", groups: vec![sym("Single", "→←↑↓↔↦"), sym("Double", "⇒⇐⇔")] },
         Tab {
             title: "Functions",
@@ -428,7 +429,7 @@ mod tests {
         let t = tabs();
         assert_eq!(
             t.iter().map(|t| t.title).collect::<Vec<_>>(),
-            ["Structures", "Greek", "Operators", "Relations", "Logic and sets", "Arrows", "Functions"]
+            ["Structures", "Greek letters", "Special symbols", "Relations", "Math operations", "Arrows", "Functions"]
         );
         let structures = &t[0].groups;
         assert_eq!(

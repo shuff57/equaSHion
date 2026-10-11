@@ -96,8 +96,8 @@ One centred column, top to bottom:
 
 - **Header**: the wordmark, the tagline and a System / Light / Dark theme toggle (System follows
   `prefers-color-scheme`).
-- **Editor**: a symbol palette in tabs by context (Structures, Greek, Operators, Relations,
-  Logic and sets, Arrows, Functions), each tab split into labelled groups, then the `EquationEditor`
+- **Editor**: a symbol palette in tabs by context (Structures, Greek letters, Special symbols,
+  Relations, Math operations, Arrows, Functions, ordered like Google Docs' equation toolbar), each tab split into labelled groups, then the `EquationEditor`
 canvas. Every palette face is rendered by equashion-render, not by egui's fonts. A long
   equation shrinks to half size and then scrolls sideways to keep the caret in view.
 - **Copy button** under the canvas: one full-width button with its format drop-down built in.
