@@ -160,7 +160,7 @@ shot() {
     pw screenshot --filename "$OUT/$name.png" >/dev/null
     python3 -I "$HERE/check_png.py" "$OUT/$name.png" "$theme" || fail "$name screenshot looks blank or has the wrong theme"
 }
-check "closed disclosures" "eq.setDisclosures(false, false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
+check "closed disclosures" "eq.setDisclosures(false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
 for width in 1280 700; do
     pw resize "$width" 900 >/dev/null
     for theme in light dark; do
@@ -168,26 +168,30 @@ for width in 1280 700; do
     done
 done
 # Everything open, tall window: the whole page down to the About panel.
-check "open disclosures" "eq.setDisclosures(true, true, true) && eq.setPaletteTab('Functions') && eq.showAbout(true) && eq.showMoreCopy(true)"
+check "open disclosures" "eq.setDisclosures(true, true) && eq.setPaletteTab('Functions') && eq.showAbout(true) && eq.showMoreCopy(true)"
 for width in 1280 700; do
     pw resize "$width" 2900 >/dev/null
     for theme in light dark; do
         shot "open-$theme-$width" "$theme"
     done
 done
-check "close disclosures" "eq.setPaletteTab('Structures') && eq.setDisclosures(false, false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
-# The report form: an empty form is refused on the page, a filled one is posted to this origin
-# (xtask serve writes it under target/issue-reports) and the page says so. No sign-in anywhere.
-check "report form opens" "eq.setDisclosures(false, false, true) && eq.fillReport('nonsense', 'a', 'b') === false && eq.reportStatus() === 'idle'"
-check "an empty report is not sent" "eq.fillReport('bug', '', '') && eq.submitReport() && (await new Promise(r => setTimeout(r, 300)), eq.reportStatus() === 'idle')"
-check "a report is sent" "eq.fillReport('enhancement', 'Smoke test report', 'Sent by tests/browser/smoke.sh.') && eq.submitReport() && eq.reportStatus() === 'sending' && (await (async () => { for (let i = 0; i < 50; i++) { if (eq.reportStatus() !== 'sending') break; await new Promise(r => setTimeout(r, 100)); } return eq.reportStatus(); })()) === 'sent'"
-# The public list: the new report is in it (the page refreshes the list after a send), and a
-# vote counts once however many times it is pressed.
-check "the sent report is listed" "(await (async () => { for (let i = 0; i < 50; i++) { if (eq.reportIssues().some(x => x.title === 'Smoke test report')) return true; await new Promise(r => setTimeout(r, 100)); } return false; })()) || eq.reportIssues().map(x => x.title)"
-check "a vote counts once" "(async () => { const newest = () => eq.reportIssues().filter(x => x.title === 'Smoke test report').sort((a, b) => Number(b.id) - Number(a.id))[0]; const id = newest().id; const before = newest().votes; eq.voteIssue(id); for (let i = 0; i < 50 && !newest().voted; i++) await new Promise(r => setTimeout(r, 100)); eq.voteIssue(id); await new Promise(r => setTimeout(r, 300)); const after = newest(); return (after.voted && after.votes === before + 1) || JSON.stringify([before, after]); })()"
+check "close disclosures" "eq.setPaletteTab('Structures') && eq.setDisclosures(false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
+# The report buttons (report.js): two buttons bottom right, always visible, no menu. The accent
+# one opens the "Report an issue" panel; an empty form is refused in the panel, a filled one is
+# posted to this origin (xtask serve writes it under target/issue-reports) and the panel says so;
+# the new report is then in the list (the small button) and a vote counts once. No sign-in.
+pw resize 1280 900 >/dev/null
+check "the report button is bottom right" "(() => { const b = document.querySelector('.fab-main-btn'); if (!b) return 'no button'; const r = b.getBoundingClientRect(); return (r.width === 48 && r.height === 48 && Math.abs(innerWidth - r.right - 24) < 1.5 && Math.abs(innerHeight - r.bottom - 24) < 1.5) || [r.x, r.y, r.width, r.height, innerWidth, innerHeight]; })()"
+check "both buttons are showing and there is no menu" "(() => { const names = [...document.querySelectorAll('.fab-toolbar button')].map(b => b.getAttribute('aria-label')).join(); const vis = [...document.querySelectorAll('.fab-toolbar button')].every(b => { const r = b.getBoundingClientRect(); return r.width > 0 && getComputedStyle(b).opacity === '1'; }); return (names === 'Report a Bug,Reported issues' && vis) || [names, vis]; })()"
+check "Report a Bug opens the panel with raSHio's layout" "(() => { document.querySelector('.fab-main-btn').click(); const p = document.getElementById('issue-orb-panel'); const kinds = [...p.querySelectorAll('.issue-report-kind-label')].map(x => x.textContent).join(); const labels = [...p.querySelectorAll('label')].map(x => x.textContent).join(); return (p.getAttribute('data-visible') === 'true' && p.querySelector('h4').textContent === 'Report an issue' && kinds === 'Bug,Quirk,Improve' && labels === 'Title,Description' && p.querySelector('.issue-report-submit').textContent === 'Send report') || [kinds, labels]; })()"
 frames 8
 pw screenshot --filename "$OUT/report.png" >/dev/null
-check "close the report form" "eq.setDisclosures(false, false, false)"
+check "an empty report is refused in the panel" "(async () => { const p = document.getElementById('issue-orb-panel'); p.querySelector('.issue-report-submit').click(); await new Promise(r => setTimeout(r, 100)); const e = p.querySelector('.issue-report-error'); return (!e.hidden && e.textContent === 'Add a short title.') || e.textContent; })()"
+check "a report is sent from the panel" "(async () => { const p = document.getElementById('issue-orb-panel'); p.querySelector('[data-kind=enhancement]').click(); const t = p.querySelector('.issue-report-title'), d = p.querySelector('.issue-report-description'); t.value = 'Smoke test report'; d.value = 'Sent by tests/browser/smoke.sh.'; p.querySelector('.issue-report-submit').click(); for (let i = 0; i < 50; i++) { const th = p.querySelector('.issue-report-thanks'); if (!th.hidden) return th.textContent.startsWith('Thank you') || th.textContent; await new Promise(r => setTimeout(r, 100)); } return p.querySelector('.issue-report-error').textContent || 'no answer'; })()"
+frames 4
+check "the report is in the list and a vote counts once" "(async () => { await new Promise(r => setTimeout(r, 2600)); document.querySelector('[data-tool-id=issue-list]').click(); const p = document.getElementById('issue-orb-panel'); const items = () => [...p.querySelectorAll('.issue-item')].filter(i => i.querySelector('.issue-item-title').textContent === 'Smoke test report').sort((a, b) => Number(b.dataset.issueId) - Number(a.dataset.issueId)); for (let i = 0; i < 50 && !items().length; i++) await new Promise(r => setTimeout(r, 100)); if (!items().length) return 'not listed'; const count = () => Number(items()[0].querySelector('.issue-vote-count').textContent); const before = count(); const btn = items()[0].querySelector('.issue-vote'); btn.click(); for (let i = 0; i < 50 && btn.getAttribute('aria-pressed') !== 'true'; i++) await new Promise(r => setTimeout(r, 100)); btn.click(); await new Promise(r => setTimeout(r, 300)); return (count() === before + 1 && btn.disabled) || [before, count()]; })()"
+frames 4
+check "Escape closes the panel" "(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); return document.getElementById('issue-orb-panel').getAttribute('data-visible') === 'false' || 'still open'; })()"
 pw resize 1280 900 >/dev/null
 check "setTheme(system)" "eq.setTheme('system') && eq.themePreference() === 'system' || eq.themePreference()"
 check "still on the editor with an equation" "eq.activeTab() === 'editor' && eq.latex().length > 0"

@@ -18,15 +18,11 @@
 //! | `loadExample(idOrName)` | loads one; returns `latex()`, or `null` when unknown |
 //! | `selftest()` | `{ok, total, failures: [{id, reason}], missingGlyphs}` (runs it now) |
 //! | `galleryCount()` | number of corpus rows |
+//! | `version()` | the app version, sent with issue reports |
 //! | `activeTab()` | always `editor` (the page has one view) |
 //! | `setTab(name)` | accepted and ignored; returns true |
 //! | `showAbout(on)` | opens or closes the About panel |
-//! | `setDisclosures(paste, howto, report)` | opens or closes the paste-in, "How to type" and "Report an issue" disclosures |
-//! | `fillReport(kind, title, description)` | fills the report form (`kind` is `bug`, `quirk` or `enhancement`); false for an unknown kind |
-//! | `submitReport()` | presses Send report (an empty title or description stays on the page with a note) |
-//! | `reportStatus()` | `idle`, `sending`, `sent` or `failed` |
-//! | `reportIssues()` | the public list as `[{id, title, kind, status, votes, voted}]`, most voted first (loaded when the form first opens and after a send) |
-//! | `voteIssue(id)` | presses Vote on an issue; ignored when already voted |
+//! | `setDisclosures(paste, howto)` | opens or closes the paste-in and "How to type" disclosures |
 //! | `paletteTabs()` | the palette's tab titles, in order |
 //! | `setPaletteTab(title)` | selects a palette tab; false when there is no such title |
 //! | `unknownCommands()` | array of the equation's unknown backslash commands |
@@ -51,7 +47,6 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
 use crate::export::{CopyKind, Data};
-use crate::report::{Issue, Kind, Shot, Status, Submission};
 use crate::theme::{ThemePref, theme_name};
 use crate::{CopyRequest, Outcome, Showcase};
 
@@ -79,13 +74,12 @@ pub fn start() {
                 Box::new(|cc| {
                     let mut app = Showcase::new();
                     app.set_reduced_motion(prefers_reduced_motion());
-                    app.set_report_context(&browser_name(), &page_url());
                     app.install(&cc.egui_ctx);
                     let shared: Shared = Rc::new(RefCell::new(app));
                     if let Err(e) = install_hooks(shared.clone(), cc.egui_ctx.clone()) {
                         log::error!("equashion: could not install window.equashion: {e:?}");
                     }
-                    Ok(Box::new(WebApp { shared }))
+                    Ok(Box::new(WebApp { shared, theme: None }))
                 }),
             )
             .await;
@@ -100,50 +94,36 @@ pub fn start() {
 
 struct WebApp {
     shared: Shared,
+    /// The theme last written to `<html data-theme>`, for the report button and panel
+    /// (`report.js`), which are page elements and follow it.
+    theme: Option<&'static str>,
+}
+
+/// Write the theme in effect to `<html data-theme="light|dark">`.
+fn publish_theme(name: &str) {
+    if let Some(root) = web_sys::window().and_then(|w| w.document()).and_then(|d| d.document_element()) {
+        let _ = root.set_attribute("data-theme", name);
+    }
 }
 
 impl eframe::App for WebApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        let (requests, reports, pick, list, votes) = match self.shared.try_borrow_mut() {
+        let requests = match self.shared.try_borrow_mut() {
             Ok(mut s) => {
                 s.ui(ui);
-                if s.report_accepts_images()
-                    && let Some(shot) = take_pasted()
-                {
-                    s.shot_loaded(shot);
+                let theme = theme_name(s.effective_theme(ui.ctx()));
+                if self.theme != Some(theme) {
+                    self.theme = Some(theme);
+                    publish_theme(theme);
                 }
-                (s.take_requests(), s.take_reports(), s.take_shot_request(), s.take_list_request(), s.take_votes())
+                s.take_requests()
             }
-            Err(_) => (Vec::new(), Vec::new(), false, false, Vec::new()),
+            Err(_) => Vec::new(),
         };
         for r in requests {
             let (a, c) = (self.shared.clone(), ui.ctx().clone());
             wasm_bindgen_futures::spawn_local(async move {
                 let _ = execute(a, c, r).await;
-            });
-        }
-        for r in reports {
-            let (a, c) = (self.shared.clone(), ui.ctx().clone());
-            wasm_bindgen_futures::spawn_local(async move {
-                send_report(a, c, r).await;
-            });
-        }
-        if pick {
-            let (a, c) = (self.shared.clone(), ui.ctx().clone());
-            wasm_bindgen_futures::spawn_local(async move {
-                pick_screenshot(a, c).await;
-            });
-        }
-        if list {
-            let (a, c) = (self.shared.clone(), ui.ctx().clone());
-            wasm_bindgen_futures::spawn_local(async move {
-                load_issues(a, c).await;
-            });
-        }
-        for id in votes {
-            let (a, c) = (self.shared.clone(), ui.ctx().clone());
-            wasm_bindgen_futures::spawn_local(async move {
-                cast_vote(a, c, id).await;
             });
         }
     }
@@ -200,137 +180,6 @@ fn start_write(r: &CopyRequest, items: &Object) -> Result<Promise, JsValue> {
     Ok(Promise::resolve(&v))
 }
 
-/// Call `window.equashionReport[name](args)`.
-fn report_helper(name: &str, args: &[JsValue]) -> Result<Promise, JsValue> {
-    let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
-    let helper = Reflect::get(&window, &JsValue::from_str("equashionReport"))?;
-    let f: Function = Reflect::get(&helper, &JsValue::from_str(name))?.dyn_into()?;
-    let v = f.apply(&helper, &args.iter().cloned().collect::<Array>())?;
-    Ok(Promise::resolve(&v))
-}
-
-/// POST one report and tell the app how it went.
-async fn send_report(s: Shared, ctx: egui::Context, r: Submission) {
-    let json = JsValue::from_str(&r.to_json());
-    let answer = match report_helper("send", &[json]) {
-        Ok(p) => JsFuture::from(p).await.ok().and_then(|v| v.as_string()),
-        Err(_) => None,
-    };
-    let result = match answer.as_deref() {
-        Some("sent") => Ok(()),
-        Some(why) if !why.is_empty() => Err(why.to_string()),
-        _ => Err("The report could not be sent.".to_string()),
-    };
-    if let Ok(mut app) = s.try_borrow_mut() {
-        app.report_finished(result);
-    }
-    ctx.request_repaint();
-}
-
-fn text_field(v: &JsValue, name: &str) -> Option<String> {
-    Reflect::get(v, &JsValue::from_str(name)).ok().and_then(|x| x.as_string())
-}
-
-/// One entry of `{reports: [...]}` as an [`Issue`].
-fn issue_from(v: &JsValue) -> Option<Issue> {
-    let votes = Reflect::get(v, &JsValue::from_str("votes")).ok().and_then(|x| x.as_f64()).unwrap_or(0.0);
-    Some(Issue {
-        id: text_field(v, "id")?,
-        kind: Kind::from_value(&text_field(v, "kind")?).unwrap_or(Kind::Bug),
-        title: text_field(v, "title")?,
-        description: text_field(v, "description").unwrap_or_default(),
-        status: Status::from_value(&text_field(v, "status").unwrap_or_default()),
-        votes: votes.max(0.0) as u32,
-        voted: Reflect::get(v, &JsValue::from_str("voted")).ok().and_then(|x| x.as_bool()).unwrap_or(false),
-        screenshot_url: text_field(v, "screenshotUrl"),
-    })
-}
-
-/// The list of every reported issue, with this browser's votes marked.
-async fn fetch_issues() -> Result<Vec<Issue>, String> {
-    let p = report_helper("list", &[]).map_err(|_| "The list could not be requested.".to_string())?;
-    let v = JsFuture::from(p).await.map_err(|_| "The list could not be requested.".to_string())?;
-    if let Some(e) = text_field(&v, "error") {
-        return Err(e);
-    }
-    let reports = Reflect::get(&v, &JsValue::from_str("reports")).map_err(|_| "The list was not understood.".to_string())?;
-    Ok(Array::from(&reports).iter().filter_map(|x| issue_from(&x)).collect())
-}
-
-async fn load_issues(s: Shared, ctx: egui::Context) {
-    let r = fetch_issues().await;
-    if let Ok(mut app) = s.try_borrow_mut() {
-        app.issues_loaded(r);
-    }
-    ctx.request_repaint();
-}
-
-/// Post one vote and tell the app the new total.
-async fn cast_vote(s: Shared, ctx: egui::Context, id: String) {
-    let answer = match report_helper("vote", &[JsValue::from_str(&id)]) {
-        Ok(p) => JsFuture::from(p).await.ok(),
-        Err(_) => None,
-    };
-    let result = match answer {
-        Some(v) => match (text_field(&v, "error"), Reflect::get(&v, &JsValue::from_str("votes")).ok().and_then(|x| x.as_f64())) {
-            (Some(e), _) => Err(e),
-            (None, Some(n)) => Ok(n.max(0.0) as u32),
-            _ => Err("The vote was not understood.".to_string()),
-        },
-        None => Err("The vote could not be sent.".to_string()),
-    };
-    if let Ok(mut app) = s.try_borrow_mut() {
-        app.vote_finished(&id, result);
-    }
-    ctx.request_repaint();
-}
-
-/// A picked file or pasted image as the app's [`Shot`].
-fn shot_from(v: &JsValue) -> Option<Result<Shot, String>> {
-    if v.is_null() || v.is_undefined() {
-        return None;
-    }
-    if let Some(e) = Reflect::get(v, &JsValue::from_str("error")).ok().and_then(|e| e.as_string()) {
-        return Some(Err(e));
-    }
-    let name = Reflect::get(v, &JsValue::from_str("name")).ok().and_then(|e| e.as_string())?;
-    let data_url = Reflect::get(v, &JsValue::from_str("dataUrl")).ok().and_then(|e| e.as_string())?;
-    Some(Ok(Shot { name, data_url }))
-}
-
-/// Open the file picker; the app takes the image (or the refusal), or just stops waiting.
-async fn pick_screenshot(s: Shared, ctx: egui::Context) {
-    let v = match report_helper("pickScreenshot", &[]) {
-        Ok(p) => JsFuture::from(p).await.unwrap_or(JsValue::NULL),
-        Err(_) => JsValue::NULL,
-    };
-    if let Ok(mut app) = s.try_borrow_mut() {
-        match shot_from(&v) {
-            Some(r) => app.shot_loaded(r),
-            None => app.shot_loaded(Err(String::new())),
-        }
-    }
-    ctx.request_repaint();
-}
-
-/// An image pasted since the last frame, if any (it is taken, so it is read once).
-fn take_pasted() -> Option<Result<Shot, String>> {
-    let window = web_sys::window()?;
-    let helper = Reflect::get(&window, &JsValue::from_str("equashionReport")).ok()?;
-    let v = Reflect::get(&helper, &JsValue::from_str("pasted")).ok()?;
-    let shot = shot_from(&v)?;
-    let _ = Reflect::set(&helper, &JsValue::from_str("pasted"), &JsValue::NULL);
-    Some(shot)
-}
-
-fn browser_name() -> String {
-    web_sys::window().and_then(|w| w.navigator().user_agent().ok()).unwrap_or_default()
-}
-
-fn page_url() -> String {
-    web_sys::window().and_then(|w| w.location().href().ok()).unwrap_or_default()
-}
-
 /// `prefers-reduced-motion: reduce` is set in the browser.
 fn prefers_reduced_motion() -> bool {
     web_sys::window().and_then(|w| w.match_media("(prefers-reduced-motion: reduce)").ok().flatten()).is_some_and(|m| m.matches())
@@ -383,6 +232,10 @@ fn install_hooks(s: Shared, ctx: egui::Context) -> Result<(), JsValue> {
     let a = s.clone();
     let f = Closure::<dyn Fn() -> u32>::new(move || with(&a, |app| app.gallery_count() as u32));
     set(&obj, "galleryCount", f.as_ref())?;
+    f.forget();
+
+    let f = Closure::<dyn Fn() -> String>::new(|| env!("CARGO_PKG_VERSION").to_string());
+    set(&obj, "version", f.as_ref())?;
     f.forget();
 
     let a = s.clone();
@@ -518,71 +371,12 @@ fn install_hooks(s: Shared, ctx: egui::Context) -> Result<(), JsValue> {
     f.forget();
 
     let (a, c) = (s.clone(), ctx.clone());
-    let f = Closure::<dyn Fn(bool, bool, bool) -> bool>::new(move |paste: bool, howto: bool, report: bool| {
-        with(&a, |app| app.set_disclosures(paste, howto, report));
+    let f = Closure::<dyn Fn(bool, bool) -> bool>::new(move |paste: bool, howto: bool| {
+        with(&a, |app| app.set_disclosures(paste, howto));
         c.request_repaint();
         true
     });
     set(&obj, "setDisclosures", f.as_ref())?;
-    f.forget();
-
-    let (a, c) = (s.clone(), ctx.clone());
-    let f = Closure::<dyn Fn(String, String, String) -> bool>::new(move |kind: String, title: String, description: String| {
-        let kind = Kind::ALL.into_iter().find(|k| k.value() == kind);
-        let ok = kind.is_some();
-        with(&a, |app| {
-            if let Some(k) = kind {
-                app.fill_report(k, &title, &description);
-            }
-        });
-        c.request_repaint();
-        ok
-    });
-    set(&obj, "fillReport", f.as_ref())?;
-    f.forget();
-
-    let (a, c) = (s.clone(), ctx.clone());
-    let f = Closure::<dyn Fn() -> bool>::new(move || {
-        with(&a, |app| app.submit_report());
-        c.request_repaint();
-        true
-    });
-    set(&obj, "submitReport", f.as_ref())?;
-    f.forget();
-
-    let a = s.clone();
-    let f = Closure::<dyn Fn() -> Array>::new(move || {
-        with(&a, |app| {
-            app.issues()
-                .iter()
-                .map(|i| {
-                    let o = Object::new();
-                    let _ = set(&o, "id", &JsValue::from_str(&i.id));
-                    let _ = set(&o, "title", &JsValue::from_str(&i.title));
-                    let _ = set(&o, "kind", &JsValue::from_str(i.kind.value()));
-                    let _ = set(&o, "status", &JsValue::from_str(i.status.label()));
-                    let _ = set(&o, "votes", &JsValue::from_f64(f64::from(i.votes)));
-                    let _ = set(&o, "voted", &JsValue::from_bool(i.voted));
-                    JsValue::from(o)
-                })
-                .collect::<Array>()
-        })
-    });
-    set(&obj, "reportIssues", f.as_ref())?;
-    f.forget();
-
-    let (a, c) = (s.clone(), ctx.clone());
-    let f = Closure::<dyn Fn(String) -> bool>::new(move |id: String| {
-        with(&a, |app| app.vote(&id));
-        c.request_repaint();
-        true
-    });
-    set(&obj, "voteIssue", f.as_ref())?;
-    f.forget();
-
-    let a = s.clone();
-    let f = Closure::<dyn Fn() -> String>::new(move || with(&a, |app| app.report_status().to_string()));
-    set(&obj, "reportStatus", f.as_ref())?;
     f.forget();
 
     let (a, c) = (s.clone(), ctx.clone());

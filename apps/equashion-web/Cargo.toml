@@ -29,7 +29,7 @@ eframe = { workspace = true, features = ["default_fonts", "glow"] }
 wasm-bindgen = "=0.2.128"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "Location", "MediaQueryList", "Navigator"] }
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "Location", "MediaQueryList"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 egui_kittest = { workspace = true }

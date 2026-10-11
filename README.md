@@ -110,12 +110,13 @@ canvas. Every palette face is rendered by equashion-render, not by egui's fonts.
   (each line is checked against the editor in `apps/equashion-web/tests/showcase.rs`).
 - **Footer**: the MathLive credit and **About and licences**, which opens a panel with what it
   is, credits, the licence and known limits.
-- **Report an issue**: a disclosure under "How to type". Pick Bug (doesn't work), Quirk (works,
-  but picky) or Improve (wish it had), add a title (100 characters) and a description (2000), and
-  optionally attach a screenshot (a file or a pasted image, 1 MB at most). No sign-in. The report
-  carries the equation in the editor, the browser and the page address. Under the form, **Reported
-  so far** lists what others reported with its status, and each entry has a Vote button. Reports
-  become GitHub issues; see [docs/issue-reports.md](docs/issue-reports.md).
+- **Report a Bug button**, bottom right like raSHio's: the accent button opens the "Report an
+  issue" panel, the small one above it opens the list of what was reported. In the panel pick Bug
+  (doesn't work), Quirk (works, but picky) or Improve (wish it had), add a title (100 characters)
+  and a description (2000), and optionally attach a screenshot (a file or a pasted image, 1 MB at
+  most). No sign-in. The report carries the equation in the editor, the browser and the page
+  address. In the list each issue shows its status and has a Vote button. Reports become GitHub
+  issues; see [docs/issue-reports.md](docs/issue-reports.md).
 
 ### What each Copy button puts on the clipboard
 
