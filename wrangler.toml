@@ -1,0 +1,16 @@
+# Cloudflare Pages: the static site in dist/ (cargo xtask web) plus the issue-report functions
+# in functions/. See docs/issue-reports.md.
+name = "equashion"
+compatibility_date = "2024-12-05"
+pages_build_output_dir = "dist"
+
+[vars]
+# The GitHub repo reports are filed in. GITHUB_TOKEN (Issues: read and write on this repo only) is
+# a secret and is not here: wrangler pages secret put GITHUB_TOKEN --project-name equashion
+GITHUB_REPO = "shuff57/equaSHion"
+
+# Votes, screenshots and the rate-limit record (migrations/0001_issue_reports.sql).
+[[d1_databases]]
+binding = "EQUASHION_DB"
+database_name = "equashion"
+database_id = "084badb2-f8c8-4a48-91e4-8357f29321d0"
