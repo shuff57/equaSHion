@@ -629,12 +629,28 @@
       });
   }
 
+  var pendingTools = [];
+
   function start() {
     if (document.getElementById('issue-orb-panel')) return;
     build();
+    pendingTools.splice(0).forEach(function (t) {
+      addTool(t[0], t[1], t[2], t[3]);
+    });
   }
 
-  window.equashionReportUi = { open: openPanel };
+  // Other page scripts (coffee.js) add their button to the same column and can close the panel.
+  window.equashionReportUi = {
+    open: openPanel,
+    close: function () {
+      if (panel && isVisible()) setVisible(false);
+    },
+    // Tools added before the column is built wait for it.
+    addTool: function (id, label, icon, onClick) {
+      if (subs) addTool(id, label, icon, onClick);
+      else pendingTools.push([id, label, icon, onClick]);
+    },
+  };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 })();

@@ -117,6 +117,12 @@ canvas. Every palette face is rendered by equashion-render, not by egui's fonts.
   most). No sign-in. The report carries the equation in the editor, the browser and the page
   address. In the list each issue shows its status and has a Vote button. Reports become GitHub
   issues; see [docs/issue-reports.md](docs/issue-reports.md).
+- **Buy me a coffee**: a third small button (a mug) in the same column, ported from inishial. It
+  opens Buy Me a Coffee's hosted panel (`data-id="shuff57"`), and a one-line invitation shows
+  once per session for ten seconds. This is the only third-party request the page makes
+  (`cdnjs.buymeacoffee.com`, loaded from `index.html`); with the network off the button does
+  nothing. `apps/equashion-web/coffee.js` holds the behaviour. To use another handle, change
+  `data-id` in `index.html`.
 
 ### What each Copy button puts on the clipboard
 

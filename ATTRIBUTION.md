@@ -28,3 +28,10 @@ The OMML samples in `corpus/omml/` are copied from the WordCraft and DeckCraft t
 (MIT OR Apache-2.0, like the code); PROVENANCE.md lists the file and line each came from. The
 typed equations in `corpus/equations.tsv` and the generated files in `tests/golden/` are
 original to this repository.
+
+## Buy Me a Coffee
+
+The page loads Buy Me a Coffee's hosted widget (`https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js`)
+for the mug button. It is a third-party script and the only third-party request the page makes;
+it is loaded from `apps/equashion-web/index.html`. `apps/equashion-web/coffee.js` and the mug
+icon paths are the author's own, ported from the inishial repository (`public/bmc.js`).
