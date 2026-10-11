@@ -9,6 +9,14 @@
   <link data-trunk rel="copy-file" href="report.js" />
   <link data-trunk rel="copy-file" href="coffee.js" />
   <link data-trunk rel="copy-file" href="logo.js" />
+  <!-- The favicon: the SH set as a fraction (assets/logo). The SVG follows the system theme from
+       inside the file; the .ico is the fallback and what /favicon.ico requests resolve to. -->
+  <link data-trunk rel="copy-file" href="../../assets/logo/favicon.svg" />
+  <link data-trunk rel="copy-file" href="../../assets/logo/favicon.ico" />
+  <link data-trunk rel="copy-file" href="../../assets/logo/apple-touch-icon.png" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" sizes="any" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <style>
     /* Page colours before the first frame: the bg tokens of src/theme.rs. */
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f6f6f7; color: #5c5c66; }
