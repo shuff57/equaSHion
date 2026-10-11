@@ -567,38 +567,32 @@ impl Showcase {
         self.copy_rects.clear();
         let kind = self.copy_kind;
         // One big button with its format drop-down attached, then the inline confirmation.
-        let mut row_left = ui.cursor().min.x;
-        let chevron = ui
-            .horizontal(|ui| {
-                ui.spacing_mut().item_spacing = vec2(2.0, S8);
-                // The inline confirmation, for two seconds, replaces the label on the button.
-                let mut label = kind.title();
-                if let Some(s) = self.status.as_mut()
-                    && let Some(o) = s.outcome
-                    && o != Outcome::Blocked
-                {
-                    let at = *s.shown_at.get_or_insert(now);
-                    if now - at < CONFIRM_SECS {
-                        label = if o == Outcome::Downloaded { "Downloaded" } else { "Copied" };
-                        ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
-                    } else {
-                        self.status = None;
-                    }
-                }
-                let width = (ui.available_width() - BUTTON_H - ui.spacing().item_spacing.x).max(0.0);
-                let r = split_main(ui, p, label, width).on_hover_text(kind.hint());
-                row_left = r.rect.left();
-                self.copy_rects.push((kind, r.rect));
-                if r.clicked() {
-                    pressed = Some(kind);
-                }
-                let c = split_chevron(ui, p, self.more_copy);
-                if c.clicked() {
-                    toggle_menu = true;
-                }
-                c
-            })
-            .inner;
+        // The inline confirmation, for two seconds, replaces the label on the button.
+        let mut label = kind.title();
+        if let Some(s) = self.status.as_mut()
+            && let Some(o) = s.outcome
+            && o != Outcome::Blocked
+        {
+            let at = *s.shown_at.get_or_insert(now);
+            if now - at < CONFIRM_SECS {
+                label = if o == Outcome::Downloaded { "Downloaded" } else { "Copied" };
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+            } else {
+                self.status = None;
+            }
+        }
+        // One full-width button with its format drop-down built in.
+        let (main, chevron) = split_button(ui, p, label, self.more_copy);
+        let main = main.on_hover_text(kind.hint());
+        let chevron = chevron.on_hover_text("Choose the format to copy");
+        let row_left = main.rect.left();
+        self.copy_rects.push((kind, main.rect));
+        if main.clicked() {
+            pressed = Some(kind);
+        }
+        if chevron.clicked() {
+            toggle_menu = true;
+        }
         if self.more_copy {
             // Below the button; above it when the six rows would run off the bottom of the window.
             let below = ui.ctx().content_rect().max.y - chevron.rect.bottom() >= MENU_H;
@@ -614,14 +608,7 @@ impl Showcase {
                         ui.set_min_width((chevron.rect.right() - row_left - 2.0 * S8).max(230.0));
                         ui.spacing_mut().item_spacing = vec2(S4, S4);
                         for k in CopyKind::ALL {
-                            let r = ui.add(
-                                egui::Button::new(RichText::new(k.title()).size(T_BODY))
-                                    .min_size(vec2(ui.available_width(), BUTTON_H))
-                                    .frame(false)
-                                    .selected(k == kind)
-                                    .wrap_mode(egui::TextWrapMode::Extend),
-                            );
-                            let r = r.on_hover_text(k.hint());
+                            let r = menu_row(ui, p, k.title(), k == kind).on_hover_text(k.hint());
                             self.copy_rects.push((k, r.rect));
                             if r.clicked() {
                                 chosen = Some(k);
@@ -843,49 +830,78 @@ fn main_button(ui: &mut Ui, p: &Palette, text: &str, primary: bool) -> egui::Res
 /// Room the format menu needs below its button, points (six rows, gaps and frame).
 const MENU_H: f32 = 6.0 * (BUTTON_H + S4) + 2.0 * S8;
 
-/// The big accent Copy button of the split control.
-fn split_main(ui: &mut Ui, p: &Palette, text: &str, width: f32) -> egui::Response {
-    ui.scope(|ui| {
-        accent_fill(ui, p);
-        ui.spacing_mut().button_padding = vec2(S24, S8);
-        ui.add(
-            egui::Button::new(RichText::new(text).size(T_BODY + 1.0).strong())
-                .min_size(vec2(width, BUTTON_H + 4.0))
-                .wrap_mode(egui::TextWrapMode::Extend),
-        )
-    })
-    .inner
-}
-
-/// The drop-down arrow attached to [`split_main`].
-fn split_chevron(ui: &mut Ui, p: &Palette, open: bool) -> egui::Response {
-    let r = ui
-        .scope(|ui| {
-            accent_fill(ui, p);
-            ui.add(egui::Button::new("").min_size(vec2(BUTTON_H, BUTTON_H + 4.0)))
-        })
-        .inner;
-    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Choose format"));
-    let c = r.rect.center();
-    let (w, h) = (6.0, 3.5);
-    let pts = if open {
-        vec![pos2(c.x - w, c.y + h), pos2(c.x + w, c.y + h), pos2(c.x, c.y - h)]
-    } else {
-        vec![pos2(c.x - w, c.y - h), pos2(c.x + w, c.y - h), pos2(c.x, c.y + h)]
-    };
-    ui.painter().add(egui::Shape::convex_polygon(pts, p.on_accent, Stroke::NONE));
-    r.on_hover_text("Choose the format to copy")
-}
-
-fn accent_fill(ui: &mut Ui, p: &Palette) {
-    let w = &mut ui.visuals_mut().widgets;
-    for (v, fill) in [(&mut w.inactive, p.accent), (&mut w.hovered, p.accent_hover), (&mut w.active, p.accent_pressed)] {
-        v.bg_fill = fill;
-        v.weak_bg_fill = fill;
-        v.bg_stroke = Stroke::new(1.0, fill);
-        v.fg_stroke = Stroke::new(1.0, p.on_accent);
+/// The Copy button and its drop-down as one accent pill: the label on the left, a divider and
+/// an arrow on the right. Returns the label's response and the arrow's.
+fn split_button(ui: &mut Ui, p: &Palette, label: &str, open: bool) -> (egui::Response, egui::Response) {
+    let h = BUTTON_H + 4.0;
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::hover());
+    let arrow_w = BUTTON_H + 8.0;
+    let main_rect = egui::Rect::from_min_max(rect.min, pos2(rect.max.x - arrow_w, rect.max.y));
+    let arrow_rect = egui::Rect::from_min_max(pos2(rect.max.x - arrow_w, rect.min.y), rect.max);
+    let id = ui.id().with("equashion-copy-split");
+    let main = ui.interact(main_rect, id.with("main"), Sense::click());
+    let arrow = ui.interact(arrow_rect, id.with("arrow"), Sense::click());
+    main.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
+    arrow.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Choose format"));
+    if ui.is_rect_visible(rect) {
+        let fill = |r: &egui::Response| {
+            if r.is_pointer_button_down_on() {
+                p.accent_pressed
+            } else if r.hovered() || r.has_focus() {
+                p.accent_hover
+            } else {
+                p.accent
+            }
+        };
+        let r = R_CONTROL;
+        let painter = ui.painter();
+        painter.rect_filled(main_rect, egui::CornerRadius { nw: r, sw: r, ne: 0, se: 0 }, fill(&main));
+        painter.rect_filled(arrow_rect, egui::CornerRadius { nw: 0, sw: 0, ne: r, se: r }, fill(&arrow));
+        // A hairline between the two halves.
+        let x = arrow_rect.min.x;
+        painter.line_segment([pos2(x, rect.min.y + 8.0), pos2(x, rect.max.y - 8.0)], Stroke::new(1.0, p.on_accent.gamma_multiply(0.45)));
+        let galley = painter.layout_no_wrap(label.to_string(), FontId::proportional(T_BODY + 1.0), p.on_accent);
+        let pos = main_rect.center() - galley.size() / 2.0;
+        painter.galley(pos2(pos.x.round(), pos.y.round()), galley, p.on_accent);
+        let c = arrow_rect.center();
+        let (w, hh) = (6.0, 3.5);
+        let pts = if open {
+            vec![pos2(c.x - w, c.y + hh), pos2(c.x + w, c.y + hh), pos2(c.x, c.y - hh)]
+        } else {
+            vec![pos2(c.x - w, c.y - hh), pos2(c.x + w, c.y - hh), pos2(c.x, c.y + hh)]
+        };
+        painter.add(egui::Shape::convex_polygon(pts, p.on_accent, Stroke::NONE));
+        for resp in [&main, &arrow] {
+            if resp.has_focus() {
+                painter.rect_stroke(resp.rect, R_CONTROL, Stroke::new(2.0, p.strong), StrokeKind::Inside);
+            }
+        }
     }
-    w.active.bg_stroke = Stroke::new(2.0, p.strong);
+    (main, arrow)
+}
+
+/// One row of the format menu: no border, a tinted background under the pointer, and the
+/// picked format in the accent colour.
+fn menu_row(ui: &mut Ui, p: &Palette, text: &str, selected: bool) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), BUTTON_H), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, text));
+    if ui.is_rect_visible(rect) {
+        let (fill, fg) = if resp.is_pointer_button_down_on() {
+            (p.control_active, p.strong)
+        } else if resp.hovered() || resp.has_focus() {
+            (p.control_hover, p.strong)
+        } else if selected {
+            (Color32::TRANSPARENT, p.accent_text)
+        } else {
+            (Color32::TRANSPARENT, p.text)
+        };
+        let painter = ui.painter();
+        painter.rect_filled(rect, R_CONTROL, fill);
+        let galley = painter.layout_no_wrap(text.to_string(), FontId::proportional(T_BODY), fg);
+        let y = rect.center().y - galley.size().y / 2.0;
+        painter.galley(pos2((rect.min.x + S12).round(), y.round()), galley, fg);
+    }
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
 /// A theme segment: text on a tinted background when selected, a hover fill, and the accent
