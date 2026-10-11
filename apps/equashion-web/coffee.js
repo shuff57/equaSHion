@@ -1,8 +1,8 @@
-// Buy Me a Coffee: a third button in the report buttons' column, the in-page invitation, and the
-// height cap on BMC's panel. Ported from inishial (public/bmc.js and its rules in app.css), with
-// one change of shape: inishial pins BMC's own chip top right; here that chip is hidden and the
-// mug button in the bottom-right column drives it, so the corner has one stack of buttons and
-// nothing sits over the equation editor.
+// Buy Me a Coffee: a mug button pinned top right, just under the header, with its panel opening
+// downward, the in-page invitation, and the height cap on BMC's panel. Ported from inishial
+// (public/bmc.js and its rules in app.css). inishial restyles BMC's own chip; here the chip is
+// kept out of sight and a button in the report buttons' style (a 40 px card) drives it, so the
+// two share one look.
 //
 // BMC's hosted widget (the <script data-name="BMC-Widget"> tag in index.html) loads from
 // cdnjs.buymeacoffee.com and injects the chip (#bmc-wbtn) and the payment panel
@@ -24,20 +24,31 @@
   var CSS = [
     // BMC's own chip is driven from the mug button, so it stays out of sight and out of the way.
     '#bmc-wbtn { opacity: 0 !important; pointer-events: none !important; }',
+    // The mug button: top right, under the 64 px header, in the style of the report buttons.
+    '.bmc-mug-btn { position: fixed; top: 80px; right: 24px; z-index: 1100; width: 40px; height: 40px; border: none; border-radius: 12px; background: var(--card-bg, #fcfcfc); color: var(--fg, #2a2a30); cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px var(--shadow, rgba(0, 0, 0, 0.25)); padding: 0; transition: filter 0.2s ease; }',
+    '.bmc-mug-btn:hover { filter: brightness(1.15); }',
+    '.bmc-mug-btn:focus-visible { outline: 2px solid var(--fg, #2a2a30); outline-offset: 2px; }',
+    '.bmc-mug-btn svg { pointer-events: none; }',
+    '.bmc-mug-btn .fab-tooltip { position: absolute; right: calc(100% + 8px); top: 50%; transform: translateY(-50%); background: var(--card-bg, #fcfcfc); color: var(--fg, #2a2a30); font: 500 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 4px 8px; border-radius: 4px; white-space: nowrap; box-shadow: 0 2px 6px var(--shadow, rgba(0, 0, 0, 0.2)); pointer-events: none; opacity: 0; transition: opacity 0.15s ease; }',
+    '.bmc-mug-btn:hover .fab-tooltip, .bmc-mug-btn:focus-visible .fab-tooltip { opacity: 1; }',
+    '@media (min-width: 640px) and (max-width: 1024px) { .bmc-mug-btn { right: 16px; } }',
+    '@media print { .bmc-mug-btn { display: none !important; } }',
     // BMC injects a thank-you message div with no class or id, position: fixed, as a child of
     // body. The empty message would draw as a stray box; its overlay wrapper (top: 0; left: 0)
     // is the one div that must stay.
     'body > div[style*="position: fixed"]:not([id]):not([class]):not([style*="top: 0"]):not([style*="top:0"]) { display: none !important; }',
-    // The panel opens beside the button column, growing up from the bottom right. Its height is
-    // capped here, not in script: BMC ships !important rules and min-height: 680px, and
-    // min-height always beats max-height, so the min has to be released first.
-    'iframe#bmc-iframe, iframe[src*="buymeacoffee.com"] { min-height: 0 !important; max-height: calc(100vh - 48px) !important; max-height: calc(100dvh - 48px) !important; transform-origin: right bottom !important; }',
-    '@media (min-width: 640px) { iframe#bmc-iframe, iframe[src*="buymeacoffee.com"] { bottom: 24px !important; right: 84px !important; } }',
+    // The panel hangs down from the button: BMC positions it with `bottom` and grows it from
+    // the bottom right, so both are flipped to the top. Its height is capped here, not in
+    // script: BMC ships !important rules and min-height: 680px, and min-height always beats
+    // max-height, so the min has to be released first. dvh, not vh, so the browser's own bars on
+    // a phone do not hide the bottom of it.
+    'iframe#bmc-iframe, iframe[src*="buymeacoffee.com"] { bottom: auto !important; top: 132px !important; min-height: 0 !important; transform-origin: right top !important; max-height: calc(100vh - 156px) !important; max-height: calc(100dvh - 156px) !important; }',
+    '@media (min-width: 640px) { iframe#bmc-iframe, iframe[src*="buymeacoffee.com"] { right: 24px !important; } }',
     // The invitation: the sentence BMC's chip is too small to carry, in the report panel's style.
-    '.bmc-invite { position: fixed; right: 84px; bottom: 136px; z-index: 1098; width: min(260px, calc(100vw - 112px)); padding: 12px 14px; background: var(--card-bg, #fcfcfc); color: var(--fg, #2a2a30); border: 1px solid var(--border, #dcdce0); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; cursor: pointer; }',
+    '.bmc-invite { position: fixed; right: 76px; top: 80px; z-index: 1098; width: min(260px, calc(100vw - 108px)); padding: 12px 14px; background: var(--card-bg, #fcfcfc); color: var(--fg, #2a2a30); border: 1px solid var(--border, #dcdce0); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; cursor: pointer; }',
     '.bmc-invite[hidden] { display: none; }',
     '.bmc-invite p { margin: 0; }',
-    '@media (min-width: 640px) and (max-width: 1024px) { .bmc-invite { right: 76px; bottom: 128px; } }',
+    '@media (min-width: 640px) and (max-width: 1024px) { .bmc-invite { right: 68px; } }',
     '@media (max-width: 639px) { .bmc-invite { display: none; } }',
     '@media print { .bmc-invite { display: none !important; } }',
   ].join('\n');
@@ -104,7 +115,8 @@
   function capIframe() {
     var f = document.getElementById('bmc-iframe');
     if (!f) return;
-    var cap = Math.min(560, Math.floor(window.innerHeight * 0.7));
+    // The room left below the button, not a share of the window: the panel hangs from 132 px.
+    var cap = Math.min(560, Math.max(240, window.innerHeight - 156));
     if (parseInt(f.style.height, 10) !== cap) f.style.height = cap + 'px';
   }
   function capSoon() {
@@ -115,11 +127,22 @@
     })();
   }
 
-  // The button joins the report buttons' column once report.js has built it.
   function addButton() {
-    var ui = window.equashionReportUi;
-    if (!ui || !ui.addTool) return setTimeout(addButton, 100);
-    ui.addTool('coffee', 'Buy me a coffee', MUG, openCoffee);
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'bmc-mug-btn';
+    b.dataset.toolId = 'coffee';
+    b.setAttribute('aria-label', 'Buy me a coffee');
+    b.innerHTML = MUG;
+    var tip = document.createElement('span');
+    tip.className = 'fab-tooltip';
+    tip.textContent = 'Buy me a coffee';
+    b.appendChild(tip);
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openCoffee();
+    });
+    document.body.appendChild(b);
     showInviteOnce();
   }
   addButton();
