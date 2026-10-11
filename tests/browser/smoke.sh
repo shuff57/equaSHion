@@ -97,7 +97,7 @@ check "OMML hidden until the menu opens" "eq.copyButtonRect('omml') === null || 
 check "showMoreCopy(true)" "eq.showMoreCopy(true) === true"
 frames 4
 check "  every format is in the menu" "['latex', 'mathml', 'image', 'omml', 'text', 'svg'].every(k => eq.copyButtonRect(k) !== null) || 'missing'"
-check "  menu items sit below the Copy button" "(() => { const m = eq.copyButtonRect('mathml'), o = eq.copyButtonRect('omml'); return o.y > m.y + m.h || [m, o]; })()"
+check "  menu items sit beside the Copy button, not over it" "(() => { const m = eq.copyButtonRect('mathml'), o = eq.copyButtonRect('omml'); return o.y > m.y + m.h || o.y + o.h < m.y || [m, o]; })()"
 read -r CX CY <<<"$(eq_rect omml)"
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 4
