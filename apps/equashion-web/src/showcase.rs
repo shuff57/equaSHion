@@ -15,6 +15,9 @@ use crate::palette::{self, Item, Palette as SymbolPalette};
 use crate::selftest::{self, Report};
 use crate::theme::{self, Palette, R_CONTROL, R_PANEL, S4, S8, S12, S16, S24, S32, T_BODY, T_CAPTION, T_H2, T_MONO, ThemePref};
 
+/// The project's source, linked from the header.
+pub const GITHUB_URL: &str = "https://github.com/shuff57/equaSHion";
+
 /// The one-line description next to the wordmark.
 pub const TAGLINE: &str = "A pure-Rust equation editor";
 
@@ -428,7 +431,9 @@ impl Showcase {
     fn header(&mut self, ui: &mut Ui, p: &Palette) {
         let w = ui.available_width();
         ui.allocate_ui_with_layout(vec2(w, 64.0), Layout::left_to_right(Align::Center), |ui| {
-            ui.label(RichText::new("equaSHion").font(theme::semibold(T_DISPLAY_WORDMARK)).color(p.strong));
+            // A phone-width header also holds the GitHub link and the theme toggle.
+            let wordmark = if w < 420.0 { T_DISPLAY_WORDMARK - 4.0 } else { T_DISPLAY_WORDMARK };
+            ui.label(RichText::new("equaSHion").font(theme::semibold(wordmark)).color(p.strong));
             if w >= 560.0 {
                 ui.add_space(S12);
                 ui.label(RichText::new(TAGLINE).size(T_BODY).color(p.muted));
@@ -443,13 +448,17 @@ impl Showcase {
                         ThemePref::Light => "Always use the light theme",
                         ThemePref::Dark => "Always use the dark theme",
                     };
-                    if segment(ui, p, self.theme == t, t.title(), hint).clicked() {
+                    if segment(ui, p, self.theme == t, t.title(), hint, w < 460.0).clicked() {
                         chosen = Some(t);
                     }
                 }
                 if let Some(t) = chosen {
                     self.set_theme_pref(t);
                 }
+                // The source, right to left so it sits just left of the theme toggle.
+                ui.add_space(S8);
+                ui.add(egui::Hyperlink::from_label_and_url(RichText::new("GitHub").size(T_BODY).color(p.accent), GITHUB_URL).open_in_new_tab(true))
+                    .on_hover_text(GITHUB_URL);
             });
         });
     }
@@ -915,9 +924,10 @@ fn menu_row(ui: &mut Ui, p: &Palette, text: &str, selected: bool) -> egui::Respo
 
 /// A theme segment: text on a tinted background when selected, a hover fill, and the accent
 /// focus ring when it has the keyboard.
-fn segment(ui: &mut Ui, p: &Palette, selected: bool, text: &str, hint: &str) -> egui::Response {
+fn segment(ui: &mut Ui, p: &Palette, selected: bool, text: &str, hint: &str, compact: bool) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(text.to_string(), FontId::proportional(T_BODY), p.text);
-    let size = vec2(galley.size().x + 2.0 * S12, 32.0);
+    // Compact segments (a phone-width header, which also holds the GitHub link) pad less.
+    let size = vec2(galley.size().x + 2.0 * if compact { S8 } else { S12 }, 32.0);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, text));
     if ui.is_rect_visible(rect) {

@@ -16,5 +16,5 @@ pub mod theme;
 pub mod web;
 
 pub use export::CopyKind;
-pub use showcase::{COPY_GUIDE, CREDIT, CopyRequest, EXAMPLES, HOW_TO_TYPE, MATHLIVE_URL, Outcome, PASTE_LABEL, Showcase, TAGLINE};
+pub use showcase::{COPY_GUIDE, CREDIT, CopyRequest, EXAMPLES, GITHUB_URL, HOW_TO_TYPE, MATHLIVE_URL, Outcome, PASTE_LABEL, Showcase, TAGLINE};
 pub use theme::ThemePref;

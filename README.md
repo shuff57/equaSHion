@@ -94,7 +94,7 @@ tool: type an equation, copy it out.
 
 One centred column, top to bottom:
 
-- **Header**: the wordmark, the tagline and a System / Light / Dark theme toggle (System follows
+- **Header**: the wordmark, the tagline, a GitHub link and a System / Light / Dark theme toggle (System follows
   `prefers-color-scheme`).
 - **Editor**: a symbol palette in tabs by context (Structures, Greek letters, Special symbols,
   Relations, Math operations, Arrows, Functions, ordered like Google Docs' equation toolbar), each tab split into labelled groups, then the `EquationEditor`

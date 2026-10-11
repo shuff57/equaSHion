@@ -453,3 +453,16 @@ fn visible_strings_have_no_long_dashes() {
         }
     }
 }
+
+#[test]
+fn the_header_links_to_the_source_at_every_width() {
+    for w in [1280.0, 700.0, 390.0] {
+        let h = harness_at(w);
+        h.get_by_label("GitHub");
+        h.get_by_label("equaSHion");
+        for t in ["System", "Light", "Dark"] {
+            h.get_by_label(t);
+        }
+    }
+    assert!(equashion_web::GITHUB_URL.starts_with("https://github.com/shuff57/equaSHion"));
+}
