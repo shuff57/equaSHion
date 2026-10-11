@@ -106,11 +106,31 @@ fn publish_theme(name: &str) {
     }
 }
 
+/// Where the header's wordmark slot is, for `logo.js`, which draws the animated wordmark there.
+/// The art is 720 x 220 with the settled word starting 137.4 units in and centred vertically;
+/// `LOGO_SCALE` sizes it so the word fills the slot.
+fn publish_logo(slot: egui::Rect) {
+    const LOGO_SCALE: f64 = 0.26;
+    if let Some(w) = web_sys::window() {
+        if let Ok(f) = js_sys::Reflect::get(&w, &JsValue::from_str("equashionLogo")) {
+            if let Some(f) = f.dyn_ref::<js_sys::Function>() {
+                let x = f64::from(slot.min.x) - 137.4 * LOGO_SCALE;
+                let y = f64::from(slot.center().y) - 110.0 * LOGO_SCALE;
+                let _ = f.call3(&JsValue::NULL, &JsValue::from_f64(x), &JsValue::from_f64(y), &JsValue::from_f64(LOGO_SCALE));
+            }
+        }
+    }
+}
+
 impl eframe::App for WebApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let requests = match self.shared.try_borrow_mut() {
             Ok(mut s) => {
+                s.reserve_logo_slot();
                 s.ui(ui);
+                if let Some(r) = s.logo_rect() {
+                    publish_logo(r);
+                }
                 let theme = theme_name(s.effective_theme(ui.ctx()));
                 if self.theme != Some(theme) {
                     self.theme = Some(theme);

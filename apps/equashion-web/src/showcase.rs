@@ -111,6 +111,10 @@ pub struct Showcase {
     symbols: SymbolPalette,
     report: Option<Report>,
     theme: ThemePref,
+    /// The host draws the animated wordmark over the header (`logo.js`): the header reserves a
+    /// slot for it instead of painting the name, and `logo_rect` is where the slot landed.
+    logo_slot: bool,
+    logo_rect: Option<egui::Rect>,
     reduced_motion: bool,
     /// Fonts and styles must be (re)installed on the context.
     style_dirty: bool,
@@ -154,6 +158,8 @@ impl Showcase {
             symbols: SymbolPalette::default(),
             report: None,
             theme: ThemePref::System,
+            logo_slot: false,
+            logo_rect: None,
             reduced_motion: false,
             style_dirty: true,
             fonts_ready: false,
@@ -186,6 +192,16 @@ impl Showcase {
             self.theme = t;
             self.style_dirty = true;
         }
+    }
+
+    /// Reserve a header slot for the host's animated wordmark instead of painting the name.
+    pub fn reserve_logo_slot(&mut self) {
+        self.logo_slot = true;
+    }
+
+    /// Where the header's wordmark slot was laid out this frame, in points, when reserved.
+    pub fn logo_rect(&self) -> Option<egui::Rect> {
+        self.logo_rect
     }
 
     /// The theme in effect on `ctx` once the preference is applied.
@@ -433,7 +449,12 @@ impl Showcase {
         ui.allocate_ui_with_layout(vec2(w, 64.0), Layout::left_to_right(Align::Center), |ui| {
             // A phone-width header also holds the GitHub link and the theme toggle.
             let wordmark = if w < 420.0 { T_DISPLAY_WORDMARK - 4.0 } else { T_DISPLAY_WORDMARK };
-            ui.label(RichText::new("equaSHion").font(theme::semibold(wordmark)).color(p.strong));
+            if self.logo_slot {
+                let (rect, _) = ui.allocate_exact_size(vec2(LOGO_SLOT_W, LOGO_SLOT_H), Sense::hover());
+                self.logo_rect = Some(rect);
+            } else {
+                ui.label(RichText::new("equaSHion").font(theme::semibold(wordmark)).color(p.strong));
+            }
             if w >= 560.0 {
                 ui.add_space(S12);
                 ui.label(RichText::new(TAGLINE).size(T_BODY).color(p.muted));
@@ -797,6 +818,10 @@ impl Showcase {
 
 /// The wordmark size.
 const T_DISPLAY_WORDMARK: f32 = 20.0;
+/// The header's wordmark slot, the settled word of `assets/logo/equashion-motion.svg` at
+/// `LOGO_SCALE` (the word is 454 art units wide and 140 tall).
+const LOGO_SLOT_W: f32 = 120.0;
+const LOGO_SLOT_H: f32 = 40.0;
 
 /// Draw `add` in the page column: at most [`COLUMN_MAX`] wide, centred, with side gutters.
 fn centred<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
