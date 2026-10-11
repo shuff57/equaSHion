@@ -1531,6 +1531,7 @@ pub struct EqLayout {
     /// Glyphs, rules and shapes, ready for the renderers (its size is the canvas size).
     pub scene: Scene,
     geo: Vec<SeqGeo>,
+    baseline: f64,
 }
 
 impl EqLayout {
@@ -1542,6 +1543,11 @@ impl EqLayout {
     /// Canvas height, points (padding included).
     pub fn height(&self) -> f64 {
         self.scene.height
+    }
+
+    /// The equation's baseline, points from the top of the canvas.
+    pub fn baseline(&self) -> f64 {
+        self.baseline
     }
 
     fn row(&self, path: &[(usize, usize)]) -> Option<&SeqGeo> {
@@ -1650,7 +1656,7 @@ pub fn layout_equation_wrapped(
         .iter()
         .map(|g| SeqGeo { path: g.path.clone(), xs: g.xs.iter().map(|x| x + ox).collect(), top: g.top + oy, bottom: g.bottom + oy })
         .collect();
-    EqLayout { scene: Scene { items, width: b.w + 2.0 * pad, height: asc + desc + 2.0 * pad }, geo }
+    EqLayout { scene: Scene { items, width: b.w + 2.0 * pad, height: asc + desc + 2.0 * pad }, geo, baseline: oy }
 }
 
 type Key = (String, String, u64, bool, bool, u64);

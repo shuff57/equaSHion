@@ -609,3 +609,18 @@ fn inline_mode_is_sized_to_the_equation() {
     h.run_steps(3);
     assert!(h.state().content_size().expect("drew").y > big.y * 1.5);
 }
+
+/// An overlay canvas is exactly the equation's size and says where its baseline is, so a host
+/// can lay it over its own drawing of the same equation.
+#[test]
+fn overlay_canvas_reports_its_baseline() {
+    let mut h = Harness::builder().with_size(vec2(600.0, 300.0)).build_ui_state(
+        |ui, ed: &mut EquationEditor| {
+            ed.show(ui);
+        },
+        EquationEditor::with_linear("a/b").inline(true).overlay(true).font_size(24.0).id_salt("overlay-test"),
+    );
+    h.run_steps(4);
+    let (size, base) = (h.state().content_size().unwrap(), h.state().inline_baseline().unwrap());
+    assert!(base > 0.0 && base < size.y, "baseline {base} inside height {}", size.y);
+}

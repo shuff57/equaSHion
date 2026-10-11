@@ -115,6 +115,9 @@ pub struct EquationEditor {
     /// Just the equation: no palette, linear field or message line, no background, sized to the
     /// equation, for editing in place on the host's page.
     inline: bool,
+    /// With `inline`: the host draws the equation itself (it is the document's own); the widget
+    /// draws only the caret, selection and active place over it.
+    overlay: bool,
     /// The idle caret blinks (off for hosts that honour reduced motion).
     caret_blink: bool,
     ed: Editor,
@@ -173,6 +176,7 @@ impl EquationEditor {
             show_palette: true,
             show_linear: true,
             inline: false,
+            overlay: false,
             caret_blink: true,
             ed: Editor::new(Math::default()),
             linear: String::new(),
@@ -247,6 +251,19 @@ impl EquationEditor {
     pub fn inline(mut self, on: bool) -> Self {
         self.inline = on;
         self
+    }
+
+    /// With [`EquationEditor::inline`]: do not draw the equation, only the caret, selection and
+    /// active place. The host draws the same equation underneath (same fonts, size and place), so
+    /// typing reads as typing in the text itself.
+    pub fn overlay(mut self, on: bool) -> Self {
+        self.overlay = on;
+        self
+    }
+
+    /// Where the baseline sits, points from the top of an inline canvas.
+    pub fn inline_baseline(&self) -> Option<f32> {
+        self.canvas.as_ref().map(|c| c.layout.baseline() as f32)
     }
 
     /// Space between an inline canvas's left / top edge and the equation's own left / top edge,
@@ -579,7 +596,7 @@ impl EquationEditor {
                 .canvas
                 .as_ref()
                 .map_or((120.0, self.font_size as f32 * 2.0), |c| (c.layout.width() as f32 + 2.0 * VIEW_MARGIN, c.layout.height() as f32));
-            (w.max(48.0), h.max(self.font_size as f32 * 1.4))
+            if self.canvas.is_some() { (w.max(2.0 * VIEW_MARGIN + 8.0), h) } else { (w.max(48.0), h.max(self.font_size as f32 * 1.4)) }
         } else {
             (ui.available_width().max(160.0), self.canvas_height)
         };
@@ -665,7 +682,9 @@ impl EquationEditor {
         {
             painter.rect_filled(to_screen(r), 1.0, v.selection.bg_fill.gamma_multiply(0.7));
         }
-        painter.image(cv.tex.id(), egui::Rect::from_min_size(origin, size), egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ink);
+        if !(self.inline && self.overlay) {
+            painter.image(cv.tex.id(), egui::Rect::from_min_size(origin, size), egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ink);
+        }
         let dim = v.weak_text_color();
         if self.ed.is_blank() && !self.inline {
             painter.text(
@@ -694,7 +713,9 @@ impl EquationEditor {
             painter.text(pos2(rect.max.x - 8.0, rect.min.y + 6.0), egui::Align2::RIGHT_TOP, "Click here to type", FontId::proportional(11.0), dim);
         }
         let stroke = if focused { egui::Stroke::new(2.0, accent) } else { egui::Stroke::new(1.0, v.widgets.noninteractive.bg_stroke.color) };
-        painter.rect_stroke(rect, if self.inline { 3.into() } else { corner }, stroke, egui::StrokeKind::Inside);
+        if !(self.inline && self.overlay) {
+            painter.rect_stroke(rect, if self.inline { 3.into() } else { corner }, stroke, egui::StrokeKind::Inside);
+        }
         resp
     }
 
