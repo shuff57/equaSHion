@@ -112,6 +112,9 @@ pub struct EquationEditor {
     canvas_height: f32,
     show_palette: bool,
     show_linear: bool,
+    /// Just the equation: no palette, linear field or message line, no background, sized to the
+    /// equation, for editing in place on the host's page.
+    inline: bool,
     /// The idle caret blinks (off for hosts that honour reduced motion).
     caret_blink: bool,
     ed: Editor,
@@ -169,6 +172,7 @@ impl EquationEditor {
             canvas_height: DEFAULT_CANVAS_HEIGHT,
             show_palette: true,
             show_linear: true,
+            inline: false,
             caret_blink: true,
             ed: Editor::new(Math::default()),
             linear: String::new(),
@@ -236,6 +240,32 @@ impl EquationEditor {
     pub fn canvas_height(mut self, h: f32) -> Self {
         self.canvas_height = if h.is_finite() { h.clamp(40.0, 2000.0) } else { DEFAULT_CANVAS_HEIGHT };
         self
+    }
+
+    /// Edit in place: only the canvas, no background, as large as the equation. The host puts it
+    /// where the equation sits (see [`EquationEditor::inline_pad`]) and draws what is behind it.
+    pub fn inline(mut self, on: bool) -> Self {
+        self.inline = on;
+        self
+    }
+
+    /// Space between an inline canvas's left / top edge and the equation's own left / top edge,
+    /// in points at the editor's scale: place the canvas at the equation's position minus this.
+    pub fn inline_pad() -> egui::Vec2 {
+        vec2(VIEW_MARGIN + EQ_PAD as f32, EQ_PAD as f32)
+    }
+
+    /// The size of the laid-out equation in points (the canvas it last drew), if it has drawn.
+    pub fn content_size(&self) -> Option<egui::Vec2> {
+        self.canvas.as_ref().map(|c| vec2(c.layout.width() as f32, c.layout.height() as f32))
+    }
+
+    /// Change the font size (points); the next frame lays the equation out again.
+    pub fn set_font_size(&mut self, pt: f64) {
+        if (self.font_size - pt).abs() > f64::EPSILON {
+            self.font_size = pt;
+            self.canvas = None;
+        }
     }
 
     /// Show the template palette (default on).
@@ -402,16 +432,18 @@ impl EquationEditor {
         let mut committed = false;
         let id = self.id;
         let inner = ui.push_id(id, |ui| {
-            if self.show_palette {
+            if self.show_palette && !self.inline {
                 self.palette_ui(ui);
                 ui.add_space(4.0);
             }
             let canvas = self.canvas_ui(ui, &mut committed);
-            ui.add_space(4.0);
-            if self.show_linear {
-                self.linear_ui(ui, &mut committed);
+            if !self.inline {
+                ui.add_space(4.0);
+                if self.show_linear {
+                    self.linear_ui(ui, &mut committed);
+                }
+                self.message_ui(ui);
             }
-            self.message_ui(ui);
             canvas
         });
         let mut cancelled = false;
@@ -541,8 +573,15 @@ impl EquationEditor {
         let filter = egui::EventFilter { tab: true, horizontal_arrows: true, vertical_arrows: true, escape: true };
         ui.memory_mut(|m| m.set_focus_lock_filter(id, filter));
 
-        let width = ui.available_width().max(160.0);
-        let height = self.canvas_height;
+        let (width, height) = if self.inline {
+            // As large as the equation (what it drew last frame; a default the first time).
+            let (w, h) = self.canvas.as_ref().map_or((120.0, self.font_size as f32 * 2.0), |c| {
+                (c.layout.width() as f32 + 2.0 * VIEW_MARGIN, c.layout.height() as f32)
+            });
+            (w.max(48.0), h.max(self.font_size as f32 * 1.4))
+        } else {
+            (ui.available_width().max(160.0), self.canvas_height)
+        };
         let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
         let resp = ui.interact(rect, id, Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::Text);
         resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, ui.is_enabled(), "Equation"));
@@ -601,7 +640,9 @@ impl EquationEditor {
         let painter = ui.painter_at(rect);
         // The host's control corner radius, so the canvas matches its other inputs.
         let corner = v.widgets.inactive.corner_radius;
-        painter.rect_filled(rect, corner, v.extreme_bg_color);
+        if !self.inline {
+            painter.rect_filled(rect, corner, v.extreme_bg_color);
+        }
         let to_screen = |r: equashion_layout::Rect| {
             egui::Rect::from_min_max(
                 pos2(origin.x + r.x0 as f32 * k, origin.y + r.y0 as f32 * k),
@@ -625,7 +666,7 @@ impl EquationEditor {
         }
         painter.image(cv.tex.id(), egui::Rect::from_min_size(origin, size), egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ink);
         let dim = v.weak_text_color();
-        if self.ed.is_blank() {
+        if self.ed.is_blank() && !self.inline {
             painter.text(
                 pos2(rect.min.x + 14.0, rect.center().y),
                 egui::Align2::LEFT_CENTER,
@@ -648,11 +689,11 @@ impl EquationEditor {
             if self.caret_blink {
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
             }
-        } else {
+        } else if !self.inline {
             painter.text(pos2(rect.max.x - 8.0, rect.min.y + 6.0), egui::Align2::RIGHT_TOP, "Click here to type", FontId::proportional(11.0), dim);
         }
         let stroke = if focused { egui::Stroke::new(2.0, accent) } else { egui::Stroke::new(1.0, v.widgets.noninteractive.bg_stroke.color) };
-        painter.rect_stroke(rect, corner, stroke, egui::StrokeKind::Inside);
+        painter.rect_stroke(rect, if self.inline { 3.into() } else { corner }, stroke, egui::StrokeKind::Inside);
         resp
     }
 

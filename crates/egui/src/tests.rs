@@ -588,3 +588,24 @@ fn a_ready_made_equation_replaces_the_equation() {
     h.run();
     assert_eq!(h.state().linear(), "e^(iπ)+1=0");
 }
+
+/// Inline mode is only the equation: it sizes itself to what was typed and has no palette.
+#[test]
+fn inline_mode_is_sized_to_the_equation() {
+    let mut h = Harness::builder().with_size(vec2(600.0, 300.0)).build_ui_state(
+        |ui, ed: &mut EquationEditor| {
+            ed.show(ui);
+        },
+        EquationEditor::with_linear("x").inline(true).font_size(20.0).id_salt("inline-test"),
+    );
+    h.run_steps(3);
+    let small = h.state().content_size().expect("drew");
+    assert!(h.query_by_label("Fractions").is_none() && h.query_by_label("Greek").is_none(), "no palette");
+    h.state_mut().set_linear("a^2+b^2=c^2+d^2+e^2");
+    h.run_steps(3);
+    let big = h.state().content_size().expect("drew");
+    assert!(big.x > small.x * 3.0, "{small:?} -> {big:?}");
+    h.state_mut().set_font_size(40.0);
+    h.run_steps(3);
+    assert!(h.state().content_size().expect("drew").y > big.y * 1.5);
+}
