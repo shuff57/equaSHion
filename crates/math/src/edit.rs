@@ -295,7 +295,7 @@ fn first_empty(seq: &[Node], depth: usize) -> Option<Path> {
     None
 }
 
-/// [`first_empty`], except that a leading script with an empty base (`ⁿC_r`: the n before the
+/// [`first_empty`], except that a leading script with an empty base (`ₙC_r`: the n before the
 /// letter) is a place of its own: the caret goes to its script, not to its base.
 fn first_empty_skipping_prescript(nodes: &[Node]) -> Option<Path> {
     let lead = match nodes.first() {
@@ -1668,7 +1668,7 @@ impl Editor {
                 break;
             }
         }
-        // Out of the n of `ⁿC_r`: straight into the r.
+        // Out of the n of `ₙC_r`: straight into the r.
         if from_prescript
             && self.caret.path.len() + 1 == start.len()
             && let Some((i, false, kids, true)) = self.unit_info(self.caret.pos)
@@ -1680,7 +1680,7 @@ impl Editor {
         }
     }
 
-    /// The caret is in a script of a script node whose base is empty (the n of `ⁿC_r`).
+    /// The caret is in a script of a script node whose base is empty (the n of `ₙC_r`).
     fn in_prescript(&self) -> bool {
         let Some((&(i, c), parent)) = self.caret.path.split_last() else { return false };
         c > 0
@@ -1964,7 +1964,7 @@ impl Editor {
             }
             let len = seq.len();
             for (i, n) in seq.iter_mut().enumerate() {
-                // A script with nothing before it and something after (the n of `ⁿC_r`) has no
+                // A script with nothing before it and something after (the n of `ₙC_r`) has no
                 // base to show: only its scripts are places.
                 let prescript = i + 1 < len && matches!(n, Node::Script { base, sub, sup } if base.is_empty() && (sub.is_some() || sup.is_some()));
                 for (c, child) in children_mut(n).into_iter().enumerate() {

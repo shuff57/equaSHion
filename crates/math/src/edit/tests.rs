@@ -939,7 +939,7 @@ fn choose_templates_have_a_place_where_n_and_r_go() {
         e.type_str("5");
         e.key(Key::Tab, false);
         e.type_str("2");
-        assert_eq!(e.latex(), format!("{{}}^5{letter}_2"), "{id}");
+        assert_eq!(e.latex(), format!("{{}}_5{letter}_2"), "{id}");
     }
 }
 

@@ -46,10 +46,10 @@ fn call2(id: &'static str, label: &'static str, name: &str) -> Template {
     Template { id, label, group: "Functions", math: Math::new(vec![Node::Func { name: name.into(), body: vec![args] }]) }
 }
 
-/// `ⁿC_r`: the letter with a place before it (n) and one after it (r), as in the textbook
+/// `ₙC_r`: the letter with a place before it (n) and one after it (r), as in the textbook
 /// notation for combinations and permutations.
 fn choose(id: &'static str, label: &'static str, letter: &str) -> Template {
-    let n = Node::Script { base: vec![], sub: None, sup: Some(slot()) };
+    let n = Node::Script { base: vec![], sub: Some(slot()), sup: None };
     let c = Node::Script { base: vec![Node::Text(letter.into())], sub: Some(slot()), sup: None };
     Template { id, label, group: "Functions", math: Math::new(vec![n, c]) }
 }
