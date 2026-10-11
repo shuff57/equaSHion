@@ -19,6 +19,67 @@ use crate::{EquationEditor, palette};
 const COLUMNS_W: f32 = 340.0;
 
 impl EquationEditor {
+    /// A rendered face of `math` at `pt` points: its texture and size in points (cached per
+    /// `key` and pixel density). The face is white on transparent; paint it with the colour you
+    /// want as the tint. For hosts that draw their own tiles and buttons.
+    pub fn face(&mut self, ui: &Ui, key: &str, math: &Math, pt: f64) -> Option<(egui::TextureId, egui::Vec2)> {
+        let sym = self.symbol(ui, key, math, pt)?;
+        Some((sym.texture_id(), sym.size()))
+    }
+
+    /// Insert a gallery template at the caret (a script or fraction takes the term before it)
+    /// and keep typing in the canvas.
+    pub fn insert_gallery_template(&mut self, ui: &Ui, template: &Math) {
+        self.palette_insert(ui, Some(template.clone()), None);
+    }
+
+    /// Insert a symbol at the caret and keep typing in the canvas.
+    pub fn insert_gallery_symbol(&mut self, ui: &Ui, c: char) {
+        self.palette_insert(ui, None, Some(c));
+    }
+
+    /// Replace the whole equation (a ready-made one) and keep typing in the canvas. Unlike
+    /// [`EquationEditor::set_math`] this is an edit: Esc would discard it.
+    pub fn replace_equation(&mut self, ui: &Ui, m: Math) {
+        let (para, jc) = (self.ed.math().para, self.ed.math().jc.clone());
+        let mut m = m;
+        m.para = para;
+        m.jc = jc;
+        self.ed.set_math(m);
+        self.wants_canvas = true;
+        let id = self.canvas_id();
+        ui.memory_mut(|mem| mem.request_focus(id));
+        self.tree_edited();
+        self.touched = ui.input(|i| i.time);
+    }
+
+    /// The equation is a display equation (on a line of its own).
+    pub fn is_display(&self) -> bool {
+        self.ed.math().para
+    }
+
+    /// Show the equation on a line of its own (`true`) or in the line of text.
+    pub fn set_display(&mut self, display: bool) {
+        if self.ed.math().para != display {
+            self.ed.math_mut().para = display;
+            self.tree_edited();
+        }
+    }
+
+    /// The display equation's justification (`left`, `right`, `center`, `centerGroup`).
+    pub fn justification(&self) -> Option<&str> {
+        self.ed.math().jc.as_deref()
+    }
+
+    /// Justify a display equation; `None` is the default (centred as group).
+    pub fn set_justification(&mut self, jc: Option<&str>) {
+        let jc = jc.map(str::to_string);
+        if self.ed.math().jc != jc {
+            self.ed.math_mut().jc = jc;
+            self.tree_edited();
+        }
+    }
+
     /// A gallery's representative face (its first template, empty places as boxes) at `pt`
     /// points, as a texture and its size in points, for a host that draws its own button.
     /// Paint it with the button's text colour as the tint.

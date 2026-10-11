@@ -35,6 +35,8 @@ pub struct Section {
 pub struct Gallery {
     pub id: String,
     pub label: String,
+    /// The picture on the gallery's ribbon button.
+    pub picture: Math,
     pub sections: Vec<Section>,
 }
 
@@ -52,6 +54,12 @@ pub struct Galleries {
     pub symbols: Vec<SymbolSet>,
     /// Ready-made equations (Insert › Equation), grouped by subject.
     pub builtins: Vec<GalleryTemplate>,
+    /// The picture on the ready-made equations button.
+    #[serde(rename = "equationPicture")]
+    pub equation_picture: Math,
+    /// TeX-style names of the symbols that have one (`α` is `alpha`), for tooltips.
+    #[serde(rename = "symbolNames")]
+    pub symbol_names: std::collections::HashMap<String, String>,
 }
 
 /// The galleries, parsed once.
@@ -65,6 +73,11 @@ impl Galleries {
     /// A structure gallery by id.
     pub fn structure(&self, id: &str) -> Option<&Gallery> {
         self.structures.iter().find(|g| g.id == id)
+    }
+
+    /// A symbol's name (`alpha` for `α`), when it has one.
+    pub fn symbol_name(&self, c: char) -> Option<&str> {
+        self.symbol_names.get(c.to_string().as_str()).map(String::as_str)
     }
 
     /// Every structure template.
@@ -106,6 +119,14 @@ mod tests {
             e.insert_template(&t.math);
             assert!(!e.math().body.is_empty(), "{} inserted nothing", t.id);
         }
+    }
+
+    #[test]
+    fn buttons_have_pictures_and_symbols_have_names() {
+        let g = galleries();
+        assert!(g.structures.iter().all(|s| !s.picture.body.is_empty()), "every gallery has a picture");
+        assert!(!g.equation_picture.body.is_empty());
+        assert_eq!(g.symbol_name('α'), Some("alpha"));
     }
 
     #[test]
