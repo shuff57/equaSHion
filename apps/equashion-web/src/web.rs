@@ -12,8 +12,8 @@
 //! | `paste(s)` | what Ctrl+V in the editor does with `s`; returns `latex()`, or `null` when refused |
 //! | `copy(kind)` | presses a Copy button (`latex`, `mathml`, `image`, `omml`, `text`, `svg`; `word` is an alias of `mathml`); a Promise of `{kind, status, items}` where `items` maps each MIME type to a string or a `Uint8Array`, and `status` is `copied`, `downloaded` or `blocked` |
 //! | `copyStatus()` | `{kind, state}` of the last Copy action, or `null` |
-//! | `copyButtonRect(kind)` | `{x, y, w, h}` of that Copy button in CSS pixels (for real clicks), or `null` when it is not on screen (OMML, text and SVG are behind "More") |
-//! | `showMoreCopy(on)` | opens or closes the second Copy row; returns `on` |
+//! | `copyButtonRect(kind)` | `{x, y, w, h}` of that Copy button in CSS pixels (for real clicks), or `null` when it is not on screen (the big button shows the picked format; every format is in the drop-down) |
+//! | `showMoreCopy(on)` | opens or closes the format drop-down; returns `on` |
 //! | `examples()` | `[{id, name}]` of the Try it examples |
 //! | `loadExample(idOrName)` | loads one; returns `latex()`, or `null` when unknown |
 //! | `selftest()` | `{ok, total, failures: [{id, reason}], missingGlyphs}` (runs it now) |

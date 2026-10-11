@@ -49,14 +49,20 @@ fn copy_buttons_queue_their_payloads() {
     let mut h = harness();
     h.state_mut().set_latex(r"\frac{a}{b}");
     h.run();
-    // OMML, text and SVG are behind "More".
+    // One big button; every format is behind its drop-down.
+    h.get_by_label("Copy LaTeX");
     for kind in CopyKind::MORE {
-        assert!(h.query_by_label(kind.title()).is_none(), "{kind:?} is shown before More");
+        assert!(h.query_by_label(kind.title()).is_none(), "{kind:?} is shown before the drop-down opens");
     }
-    h.get_by_label("More").click();
-    h.run();
-    assert!(h.state().more_copy());
     for kind in CopyKind::ALL {
+        h.get_by_label("Choose format").click();
+        h.run();
+        assert!(h.state().more_copy());
+        h.get_all_by_label(kind.title()).last().expect("menu item").click();
+        h.run();
+        assert!(!h.state().more_copy(), "{kind:?}: picking closes the menu");
+        assert_eq!(h.state().copy_kind(), kind);
+        assert!(h.state_mut().take_requests().is_empty(), "{kind:?}: picking does not copy");
         h.get_by_label(kind.title()).click();
         h.run();
         let reqs = h.state_mut().take_requests();
@@ -298,30 +304,38 @@ fn every_how_to_type_line_does_what_it_says() {
     h.get_by_label("Cases").click();
     h.run();
     assert!(h.state().latex().contains("cases"));
+    // Square-bracket matrix, and the m x n builder.
+    h.state_mut().set_latex("");
+    h.run();
+    h.get_by_label("2 by 2 matrix, square brackets").click();
+    h.run();
+    assert!(h.state().latex().contains("bmatrix"), "{}", h.state().latex());
+    h.state_mut().set_latex("");
+    h.run();
+    h.get_by_label("Insert matrix").click();
+    h.run();
+    let tex = h.state().latex();
+    assert!(tex.contains("pmatrix"), "{tex}");
+    assert_eq!(tex.matches("\\\\").count(), 1, "2 rows: {tex}");
 }
 
 #[test]
-fn copy_rows_do_not_wrap_at_1280_and_700_px() {
+fn the_copy_button_and_its_drop_down_stay_on_one_line_at_1280_and_700_px() {
     for w in [1280.0, 700.0] {
         let mut h = harness_at(w);
+        let main = h.get_by_label("Copy LaTeX").rect();
+        let arrow = h.get_by_label("Choose format").rect();
+        assert!(main.height() >= 36.0 && main.width() > arrow.width(), "{w}: {main:?} {arrow:?}");
+        assert!((main.min.y - arrow.min.y).abs() < 0.5 && main.max.x <= arrow.min.x + 0.5, "{w}: {main:?} {arrow:?}");
         h.state_mut().set_more_copy(true);
         h.run();
-        let row = |kinds: &[CopyKind], extra: Option<&str>| {
-            let mut rects: Vec<egui::Rect> = kinds.iter().map(|k| h.get_by_label(k.title()).rect()).collect();
-            if let Some(l) = extra {
-                rects.push(h.get_by_label(l).rect());
-            }
-            for r in &rects {
-                assert!((r.height() - 36.0).abs() < 0.5, "{w}: {rects:?}");
-                assert!((r.min.y - rects[0].min.y).abs() < 0.5, "{w}: the row wrapped: {rects:?}");
-            }
-            // Left to right, in button order.
-            assert!(rects.windows(2).all(|p| p[0].max.x < p[1].min.x), "{w}: {rects:?}");
-            rects
-        };
-        let main = row(&CopyKind::MAIN, Some("More"));
-        let more = row(&CopyKind::MORE, None);
-        assert!(more[0].min.y > main[0].max.y, "{w}: the More row is below the main row");
+        let items: Vec<egui::Rect> = CopyKind::ALL.iter().skip(1).map(|k| h.get_by_label(k.title()).rect()).collect();
+        let main = h.get_all_by_label("Copy LaTeX").next().expect("main button").rect();
+        // Below the button, or above it when there is no room: never over it.
+        let below = items.iter().all(|r| r.min.y > main.max.y);
+        let above = items.iter().all(|r| r.max.y < main.min.y);
+        assert!(below || above, "{w}: the menu covers the button: {main:?} {items:?}");
+        assert!(items.windows(2).all(|p| p[0].max.y <= p[1].min.y + 0.5), "{w}: items stack top to bottom: {items:?}");
     }
 }
 

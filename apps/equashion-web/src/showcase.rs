@@ -124,6 +124,8 @@ pub struct Showcase {
     about_open: bool,
     /// The second Copy row (OMML, text, SVG) is shown.
     more_copy: bool,
+    /// The format the big Copy button writes.
+    copy_kind: CopyKind,
     /// Where each Copy button was drawn last frame (for the browser test's real clicks).
     copy_rects: Vec<(CopyKind, egui::Rect)>,
 }
@@ -161,6 +163,7 @@ impl Showcase {
             howto_open: false,
             about_open: false,
             more_copy: false,
+            copy_kind: CopyKind::Latex,
             copy_rects: Vec::new(),
         }
     }
@@ -359,14 +362,24 @@ impl Showcase {
         self.howto_open = howto;
     }
 
-    /// The second Copy row (OMML, text, SVG) is open.
+    /// The format drop-down next to the Copy button is open.
     pub fn more_copy(&self) -> bool {
         self.more_copy
     }
 
-    /// Open or close the second Copy row.
+    /// Open or close the format drop-down.
     pub fn set_more_copy(&mut self, on: bool) {
         self.more_copy = on;
+    }
+
+    /// The format the big Copy button writes.
+    pub fn copy_kind(&self) -> CopyKind {
+        self.copy_kind
+    }
+
+    /// Pick the format the big Copy button writes.
+    pub fn set_copy_kind(&mut self, kind: CopyKind) {
+        self.copy_kind = kind;
     }
 
     /// Install the fonts and the theme on `ctx` now. [`Showcase::ui`] does it on its first
@@ -549,55 +562,84 @@ impl Showcase {
     fn copy_row(&mut self, ui: &mut Ui, p: &Palette) {
         let now = ui.input(|i| i.time);
         let mut pressed = None;
-        let mut toggle_more = false;
+        let mut chosen = None;
+        let mut toggle_menu = false;
         self.copy_rects.clear();
-        // One line each, never wrapped: three buttons and "More" fit a 700 px window.
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing = vec2(S8, S8);
-            for kind in CopyKind::MAIN {
-                let r = main_button(ui, p, kind.title(), kind == CopyKind::Latex).on_hover_text(kind.hint());
+        let kind = self.copy_kind;
+        // One big button with its format drop-down attached, then the inline confirmation.
+        let chevron = ui
+            .horizontal(|ui| {
+                ui.spacing_mut().item_spacing = vec2(2.0, S8);
+                let r = split_main(ui, p, kind.title()).on_hover_text(kind.hint());
                 self.copy_rects.push((kind, r.rect));
                 if r.clicked() {
                     pressed = Some(kind);
                 }
-            }
-            let hint = if self.more_copy { "Hide OMML, text and SVG" } else { "Show Copy OMML, Copy text and Download SVG" };
-            if toggle_button(ui, p, "More", self.more_copy).on_hover_text(hint).clicked() {
-                toggle_more = true;
-            }
-            // The inline confirmation, for two seconds.
-            if let Some(s) = self.status.as_mut()
-                && let Some(o) = s.outcome
-                && o != Outcome::Blocked
-            {
-                let at = *s.shown_at.get_or_insert(now);
-                if now - at < CONFIRM_SECS {
-                    ui.add_space(S4);
-                    let text = if o == Outcome::Downloaded { "Downloaded" } else { "Copied" };
-                    ui.label(RichText::new(text).size(T_BODY).color(p.accent_text));
-                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
-                } else {
-                    self.status = None;
+                let c = split_chevron(ui, p, self.more_copy);
+                if c.clicked() {
+                    toggle_menu = true;
                 }
-            }
-        });
-        if self.more_copy {
-            ui.add_space(S8);
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing = vec2(S8, S8);
-                for kind in CopyKind::MORE {
-                    let r = main_button(ui, p, kind.title(), false).on_hover_text(kind.hint());
-                    self.copy_rects.push((kind, r.rect));
-                    if r.clicked() {
-                        pressed = Some(kind);
+                // The inline confirmation, for two seconds.
+                if let Some(s) = self.status.as_mut()
+                    && let Some(o) = s.outcome
+                    && o != Outcome::Blocked
+                {
+                    let at = *s.shown_at.get_or_insert(now);
+                    if now - at < CONFIRM_SECS {
+                        ui.add_space(S12);
+                        let text = if o == Outcome::Downloaded { "Downloaded" } else { "Copied" };
+                        ui.label(RichText::new(text).size(T_BODY).color(p.accent_text));
+                        ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+                    } else {
+                        self.status = None;
                     }
                 }
-            });
+                c
+            })
+            .inner;
+        if self.more_copy {
+            // Below the button; above it when the six rows would run off the bottom of the window.
+            let below = ui.ctx().content_rect().max.y - chevron.rect.bottom() >= MENU_H;
+            let (anchor, pivot) = if below {
+                (chevron.rect.left_bottom() + vec2(0.0, S4), egui::Align2::LEFT_TOP)
+            } else {
+                (chevron.rect.left_top() - vec2(0.0, S4), egui::Align2::LEFT_BOTTOM)
+            };
+            let area = egui::Area::new(egui::Id::new("equashion-copy-menu")).order(egui::Order::Foreground).pivot(pivot).fixed_pos(anchor).show(
+                ui.ctx(),
+                |ui| {
+                    Frame::popup(ui.style()).show(ui, |ui| {
+                        ui.set_min_width(230.0);
+                        ui.spacing_mut().item_spacing = vec2(S4, S4);
+                        for k in CopyKind::ALL {
+                            let r = ui.add(
+                                egui::Button::new(RichText::new(k.title()).size(T_BODY))
+                                    .min_size(vec2(ui.available_width(), BUTTON_H))
+                                    .selected(k == kind)
+                                    .wrap_mode(egui::TextWrapMode::Extend),
+                            );
+                            let r = r.on_hover_text(k.hint());
+                            self.copy_rects.push((k, r.rect));
+                            if r.clicked() {
+                                chosen = Some(k);
+                            }
+                        }
+                    })
+                },
+            );
+            let outside = ui.input(|i| i.pointer.any_click()) && !toggle_menu && !area.response.contains_pointer() && !chevron.contains_pointer();
+            if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.more_copy = false;
+            }
         }
         ui.add_space(S8);
         ui.add(egui::Label::new(RichText::new(COPY_GUIDE).size(T_BODY).color(p.muted)).wrap());
-        if toggle_more {
+        if toggle_menu {
             self.more_copy = !self.more_copy;
+        }
+        if let Some(k) = chosen {
+            self.copy_kind = k;
+            self.more_copy = false;
         }
         if let Some(kind) = pressed {
             self.request_copy(kind);
@@ -795,24 +837,52 @@ fn main_button(ui: &mut Ui, p: &Palette, text: &str, primary: bool) -> egui::Res
     .inner
 }
 
-/// A 36 px button that stays pressed-looking while `on` (the "More" toggle).
-fn toggle_button(ui: &mut Ui, p: &Palette, text: &str, on: bool) -> egui::Response {
+/// Room the format menu needs below its button, points (six rows, gaps and frame).
+const MENU_H: f32 = 6.0 * (BUTTON_H + S4) + 2.0 * S8;
+
+/// The big accent Copy button of the split control.
+fn split_main(ui: &mut Ui, p: &Palette, text: &str) -> egui::Response {
     ui.scope(|ui| {
-        if on {
-            let w = &mut ui.visuals_mut().widgets;
-            for v in [&mut w.inactive, &mut w.hovered] {
-                v.bg_fill = p.accent_soft;
-                v.weak_bg_fill = p.accent_soft;
-                v.fg_stroke = Stroke::new(1.0, p.accent_text);
-            }
-        }
-        ui.spacing_mut().button_padding = vec2(S16, S8);
-        let b = egui::Button::new(RichText::new(text).size(T_BODY)).min_size(vec2(0.0, BUTTON_H)).wrap_mode(egui::TextWrapMode::Extend).selected(on);
-        let r = ui.add(b);
-        r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, on, text));
-        r
+        accent_fill(ui, p);
+        ui.spacing_mut().button_padding = vec2(S24, S8);
+        ui.add(
+            egui::Button::new(RichText::new(text).size(T_BODY + 1.0).strong())
+                .min_size(vec2(0.0, BUTTON_H + 4.0))
+                .wrap_mode(egui::TextWrapMode::Extend),
+        )
     })
     .inner
+}
+
+/// The drop-down arrow attached to [`split_main`].
+fn split_chevron(ui: &mut Ui, p: &Palette, open: bool) -> egui::Response {
+    let r = ui
+        .scope(|ui| {
+            accent_fill(ui, p);
+            ui.add(egui::Button::new("").min_size(vec2(BUTTON_H, BUTTON_H + 4.0)))
+        })
+        .inner;
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Choose format"));
+    let c = r.rect.center();
+    let (w, h) = (6.0, 3.5);
+    let pts = if open {
+        vec![pos2(c.x - w, c.y + h), pos2(c.x + w, c.y + h), pos2(c.x, c.y - h)]
+    } else {
+        vec![pos2(c.x - w, c.y - h), pos2(c.x + w, c.y - h), pos2(c.x, c.y + h)]
+    };
+    ui.painter().add(egui::Shape::convex_polygon(pts, p.on_accent, Stroke::NONE));
+    r.on_hover_text("Choose the format to copy")
+}
+
+fn accent_fill(ui: &mut Ui, p: &Palette) {
+    let w = &mut ui.visuals_mut().widgets;
+    for (v, fill) in [(&mut w.inactive, p.accent), (&mut w.hovered, p.accent_hover), (&mut w.active, p.accent_pressed)] {
+        v.bg_fill = fill;
+        v.weak_bg_fill = fill;
+        v.bg_stroke = Stroke::new(1.0, fill);
+        v.fg_stroke = Stroke::new(1.0, p.on_accent);
+    }
+    w.active.bg_stroke = Stroke::new(2.0, p.strong);
 }
 
 /// A theme segment: text on a tinted background when selected, a hover fill, and the accent

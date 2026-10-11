@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use egui::{Sense, TextureHandle, TextureOptions, Ui, Vec2, pos2, vec2};
 use equashion_layout::{DEFAULT_FAMILY, FontDb, Rgb, layout_equation};
-use equashion_math::{Editor, Math, Node, template, to_linear};
+use equashion_math::{Editor, Math, Node, matrix_template, template, to_linear};
 
 /// What a palette button inserts.
 #[derive(Clone, Debug, PartialEq)]
@@ -79,6 +79,7 @@ pub fn main_groups() -> Vec<Group> {
                 tpl("intlim", "Definite integral"),
                 tpl("lim", "Limit"),
                 tpl("matrix2", "2 by 2 matrix"),
+                tpl("bmatrix2", "2 by 2 matrix, square brackets"),
                 tpl("cases", "Cases"),
             ]
             .into_iter()
@@ -96,7 +97,16 @@ pub fn more_groups() -> Vec<Group> {
     vec![
         Group {
             title: "More structures",
-            items: [tpl("subsup", "Sub and superscript"), tpl("prod", "Product"), tpl("matrix3", "3 by 3 matrix")].into_iter().flatten().collect(),
+            items: [
+                tpl("subsup", "Sub and superscript"),
+                tpl("prod", "Product"),
+                tpl("matrix3", "3 by 3 matrix"),
+                tpl("bmatrix3", "3 by 3 matrix, square brackets"),
+                tpl("binom", "Binomial coefficient"),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
         },
         Group { title: "Arrows", items: symbols("→←↔⇒⇐⇔↦↑↓") },
         Group {
@@ -133,6 +143,40 @@ pub fn more_groups() -> Vec<Group> {
                 .flatten()
                 .collect(),
         },
+        Group {
+            title: "Hyperbolic",
+            items: [
+                tpl("sinh", "Hyperbolic sine"),
+                tpl("cosh", "Hyperbolic cosine"),
+                tpl("tanh", "Hyperbolic tangent"),
+                tpl("csch", "Hyperbolic cosecant"),
+                tpl("sech", "Hyperbolic secant"),
+                tpl("coth", "Hyperbolic cotangent"),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+        },
+        Group {
+            title: "Counting and rounding",
+            items: [
+                tpl("nCr", "Combinations"),
+                tpl("nPr", "Permutations"),
+                tpl("lcm", "Least common multiple"),
+                tpl("round", "Round"),
+                tpl("sign", "Sign"),
+            ]
+            .into_iter()
+            .flatten()
+            .collect(),
+        },
+        Group {
+            title: "Statistics",
+            items: [tpl("mean", "Mean"), tpl("median", "Median"), tpl("stdev", "Standard deviation"), tpl("var", "Variance")]
+                .into_iter()
+                .flatten()
+                .collect(),
+        },
         Group { title: "More Greek", items: symbols("ζηικνξορτυχψΓΘΛΞΠΦΨ") },
         Group { title: "Logic and sets", items: symbols("∧∨¬∀∃∅∗∴∵…⋯″≅≺≻⊃⊇") },
     ]
@@ -159,11 +203,15 @@ pub struct Palette {
     more: Vec<Group>,
     faces: HashMap<String, Face>,
     pub more_open: bool,
+    /// The size and brackets the "Insert matrix" button builds.
+    pub mat_rows: usize,
+    pub mat_cols: usize,
+    pub mat_square: bool,
 }
 
 impl Default for Palette {
     fn default() -> Self {
-        Palette { main: main_groups(), more: more_groups(), faces: HashMap::new(), more_open: false }
+        Palette { main: main_groups(), more: more_groups(), faces: HashMap::new(), more_open: false, mat_rows: 2, mat_cols: 3, mat_square: false }
     }
 }
 
@@ -196,6 +244,9 @@ impl Palette {
             }
         }
         self.main = main;
+        if let Some(i) = self.matrix_builder(ui, p) {
+            clicked = Some(i);
+        }
         ui.add_space(crate::theme::S4);
         let label = if self.more_open { "Fewer symbols" } else { "More symbols" };
         let r = disclosure(ui, p, label, self.more_open);
@@ -212,6 +263,35 @@ impl Palette {
             }
             self.more = more;
         }
+        clicked
+    }
+
+    /// The m x n matrix builder: rows, columns, bracket style and an Insert button.
+    fn matrix_builder(&mut self, ui: &mut Ui, p: &crate::theme::Palette) -> Option<Item> {
+        const LABEL_W: f32 = 112.0;
+        let mut clicked = None;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = vec2(crate::theme::S8, crate::theme::S4);
+            ui.allocate_ui_with_layout(vec2(LABEL_W, BUTTON), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.set_width(LABEL_W);
+                ui.label(egui::RichText::new("Matrix").size(crate::theme::T_BODY).color(p.muted));
+            });
+            ui.add(egui::DragValue::new(&mut self.mat_rows).range(1..=10).speed(0.1)).on_hover_text("Rows");
+            ui.label(egui::RichText::new("\u{00D7}").size(crate::theme::T_BODY).color(p.muted));
+            ui.add(egui::DragValue::new(&mut self.mat_cols).range(1..=10).speed(0.1)).on_hover_text("Columns");
+            for (square, text) in [(false, "( )"), (true, "[ ]")] {
+                if ui.selectable_label(self.mat_square == square, text).on_hover_text("Bracket style").clicked() {
+                    self.mat_square = square;
+                }
+            }
+            let hover = format!("Insert an empty {} by {} matrix", self.mat_rows, self.mat_cols);
+            if ui.button("Insert matrix").on_hover_text(hover).clicked() {
+                let (open, close) = if self.mat_square { ("[", "]") } else { ("(", ")") };
+                let math = matrix_template(self.mat_rows, self.mat_cols, open, close);
+                clicked = Some(Item::Structure { id: "matrix-mn", label: "Matrix", math });
+            }
+        });
+        ui.add_space(crate::theme::S8);
         clicked
     }
 
@@ -312,8 +392,8 @@ mod tests {
     fn every_structure_exists_and_bracket_pairs_round_trip() {
         let main = main_groups();
         assert_eq!(main.iter().map(|g| g.title).collect::<Vec<_>>(), ["Structures", "Greek", "Operators", "Relations"]);
-        assert_eq!(main.first().map(|g| g.items.len()), Some(11), "a template id is missing");
-        assert_eq!(more_groups().first().map(|g| g.items.len()), Some(3), "a template id is missing");
+        assert_eq!(main.first().map(|g| g.items.len()), Some(12), "a template id is missing");
+        assert_eq!(more_groups().first().map(|g| g.items.len()), Some(5), "a template id is missing");
         let more = more_groups();
         for g in main.iter().chain(&more) {
             assert!(!g.items.is_empty(), "{}", g.title);

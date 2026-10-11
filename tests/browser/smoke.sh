@@ -80,6 +80,11 @@ pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/n
 frames 8
 check "click Copy LaTeX writes text/plain" "(() => { const s = eq.copyStatus(); const w = window.__eqSet; return (s.kind === 'latex' && s.state === 'copied' && w.some(([t, d]) => t === 'text/plain' && d === 'x^2+1')) || [s, w]; })()"
 check "setLatex for the MathML click" "eq.setLatex('\\\\frac{1}{2}') === '\\\\frac{1}{2}'"
+check "open the format menu" "eq.showMoreCopy(true) === true"
+frames 4
+read -r CX CY <<<"$(eq_rect mathml)"
+[ "$CX" != "none" ] || fail "no MathML menu item rect"
+pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 4
 read -r CX CY <<<"$(eq_rect mathml)"
 [ "$CX" != "none" ] || fail "no Copy MathML button rect"
@@ -88,16 +93,24 @@ pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/n
 frames 8
 check "click Copy MathML writes MathML as text and HTML" "(() => { const s = eq.copyStatus(); const w = window.__eqSet; const t = w.find(x => x[0] === 'text/plain'), h = w.find(x => x[0] === 'text/html'); return (s.kind === 'mathml' && s.state === 'copied' && t && t[1].startsWith('<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">') && t[1].includes('<mfrac><mn>1</mn><mn>2</mn></mfrac>') && h && h[1].includes('<!--StartFragment-->' + t[1] + '<!--EndFragment-->')) || [s, w.map(x => x[0])]; })()"
 # The second row: OMML, text and SVG are behind More.
-check "OMML button hidden until More" "eq.copyButtonRect('omml') === null || eq.copyButtonRect('omml')"
+check "OMML hidden until the menu opens" "eq.copyButtonRect('omml') === null || eq.copyButtonRect('omml')"
 check "showMoreCopy(true)" "eq.showMoreCopy(true) === true"
 frames 4
-check "  OMML, text and SVG buttons shown" "['omml', 'text', 'svg'].every(k => eq.copyButtonRect(k) !== null) || ['omml', 'text', 'svg'].map(k => eq.copyButtonRect(k))"
-check "  main row on one line, More row below" "(() => { const r = ['latex', 'mathml', 'image'].map(k => eq.copyButtonRect(k)); const m = eq.copyButtonRect('omml'); return (r.every(x => Math.abs(x.y - r[0].y) < 1) && m.y > r[0].y + r[0].h) || [r, m]; })()"
+check "  every format is in the menu" "['latex', 'mathml', 'image', 'omml', 'text', 'svg'].every(k => eq.copyButtonRect(k) !== null) || 'missing'"
+check "  menu items sit below the Copy button" "(() => { const m = eq.copyButtonRect('mathml'), o = eq.copyButtonRect('omml'); return o.y > m.y + m.h || [m, o]; })()"
+read -r CX CY <<<"$(eq_rect omml)"
+pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
+frames 4
 read -r CX CY <<<"$(eq_rect omml)"
 pw --raw eval "() => { window.__eqSet = []; return true; }" >/dev/null
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 8
 check "click Copy OMML writes OMML text" "(() => { const s = eq.copyStatus(); const w = window.__eqSet; return (s.kind === 'omml' && s.state === 'copied' && w.length === 1 && w[0][0] === 'text/plain' && w[0][1].startsWith('<m:oMath xmlns:m=')) || [s, w]; })()"
+check "open the menu for image" "eq.showMoreCopy(true) === true"
+frames 4
+read -r CX CY <<<"$(eq_rect image)"
+pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
+frames 4
 read -r CX CY <<<"$(eq_rect image)"
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 pw --raw eval "async () => { for (let i = 0; i < 40; i++) { const s = window.equashion.copyStatus(); if (s && s.kind === 'image' && s.state !== 'pending') return true; await new Promise(r => setTimeout(r, 50)); } return true; }" >/dev/null

@@ -42,6 +42,8 @@ pub fn label(id: &str) -> Option<&'static str> {
         "abs" => "| |",
         "matrix2" => "2\u{00D7}2",
         "matrix3" => "3\u{00D7}3",
+        "bmatrix2" => "[2\u{00D7}2]",
+        "bmatrix3" => "[3\u{00D7}3]",
         "cases" => "{ cases",
         "overline" => "over",
         "underline" => "under",
