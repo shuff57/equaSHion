@@ -575,9 +575,10 @@ impl EquationEditor {
 
         let (width, height) = if self.inline {
             // As large as the equation (what it drew last frame; a default the first time).
-            let (w, h) = self.canvas.as_ref().map_or((120.0, self.font_size as f32 * 2.0), |c| {
-                (c.layout.width() as f32 + 2.0 * VIEW_MARGIN, c.layout.height() as f32)
-            });
+            let (w, h) = self
+                .canvas
+                .as_ref()
+                .map_or((120.0, self.font_size as f32 * 2.0), |c| (c.layout.width() as f32 + 2.0 * VIEW_MARGIN, c.layout.height() as f32));
             (w.max(48.0), h.max(self.font_size as f32 * 1.4))
         } else {
             (ui.available_width().max(160.0), self.canvas_height)

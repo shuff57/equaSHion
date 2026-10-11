@@ -40,6 +40,12 @@ fn binom() -> Node {
     Node::Delim { open: "(".into(), close: ")".into(), sep: "|".into(), items: vec![vec![grid]] }
 }
 
+/// `name(□, □)`: a function applied to two places, as `nCr(n, r)` is written.
+fn call2(id: &'static str, label: &'static str, name: &str) -> Template {
+    let args = Node::Delim { open: "(".into(), close: ")".into(), sep: ",".into(), items: vec![slot(), slot()] };
+    Template { id, label, group: "Functions", math: Math::new(vec![Node::Func { name: name.into(), body: vec![args] }]) }
+}
+
 fn mk(id: &'static str, label: &'static str, group: &'static str, n: Node) -> Template {
     Template { id, label, group, math: Math::new(vec![n]) }
 }
@@ -81,9 +87,9 @@ pub fn templates() -> Vec<Template> {
         mk("coth", "Hyperbolic cotangent", "Functions", func("coth")),
         mk("round", "Round", "Functions", func("round")),
         mk("sign", "Sign", "Functions", func("sign")),
-        mk("nCr", "Combinations", "Functions", func("nCr")),
-        mk("nPr", "Permutations", "Functions", func("nPr")),
-        mk("lcm", "Least common multiple", "Functions", func("lcm")),
+        call2("nCr", "Combinations", "nCr"),
+        call2("nPr", "Permutations", "nPr"),
+        call2("lcm", "Least common multiple", "lcm"),
         mk("mean", "Mean", "Functions", func("mean")),
         mk("median", "Median", "Functions", func("median")),
         mk("stdev", "Standard deviation", "Functions", func("stdev")),

@@ -229,7 +229,7 @@ impl Tex {
                     self.group(body, d);
                 }
             }
-            Node::Delim { open, close, items, .. } => self.delim(open, close, items, d),
+            Node::Delim { open, close, sep, items } => self.delim(open, close, sep, items, d),
             Node::Matrix { rows } => self.matrix("matrix", rows, d),
             Node::EqArr { rows } => {
                 self.raw("\\begin{aligned}");
@@ -238,7 +238,13 @@ impl Tex {
             }
             Node::Func { name, body } => {
                 self.function(name);
-                if !body.is_empty() {
+                if let [only @ Node::Delim { open, close, .. }] = body.as_slice()
+                    && open == "("
+                    && close == ")"
+                {
+                    // The argument list already has its own parentheses.
+                    self.node(only, d);
+                } else if !body.is_empty() {
                     self.delimiter("(", true);
                     self.seq(body, d);
                     self.delimiter(")", false);
@@ -391,7 +397,7 @@ impl Tex {
         self.raw(&format!("\\end{{{env}}}"));
     }
 
-    fn delim(&mut self, open: &str, close: &str, items: &[Seq], d: usize) {
+    fn delim(&mut self, open: &str, close: &str, sep: &str, items: &[Seq], d: usize) {
         // A lone matrix or `cases` array is an environment, not a delimited group.
         if let [only] = items {
             match only.as_slice() {
@@ -436,8 +442,13 @@ impl Tex {
         self.delimiter(open, true);
         for (i, it) in items.iter().enumerate() {
             if i > 0 {
-                self.cmd("middle");
-                self.raw("|");
+                // `|` stretches with the brackets; any other separator (a comma) is a plain character.
+                if sep == "|" || sep.is_empty() {
+                    self.cmd("middle");
+                    self.raw("|");
+                } else {
+                    self.raw(sep);
+                }
             }
             self.seq(it, d);
         }

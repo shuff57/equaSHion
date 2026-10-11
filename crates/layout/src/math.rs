@@ -1349,7 +1349,10 @@ impl Lay<'_> {
             parts.push(b);
             if i + 1 < n {
                 parts.push(MathBox::space(0.1 * sz));
-                if let Some(s) = make(sep) {
+                // A bar separator stretches with the brackets; a comma or semicolon is plain text.
+                if sep.chars().all(|c| c.is_whitespace() || matches!(c, ',' | ';' | '\u{FF0C}')) {
+                    parts.push(self.text(sep.trim(), Var::Upright, sz));
+                } else if let Some(s) = make(sep) {
                     parts.push(s);
                 }
                 parts.push(MathBox::space(0.1 * sz));

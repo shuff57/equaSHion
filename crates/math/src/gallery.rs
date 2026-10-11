@@ -95,7 +95,10 @@ mod tests {
     fn the_galleries_load_with_every_group() {
         let g = galleries();
         let ids: Vec<&str> = g.structures.iter().map(|g| g.id.as_str()).collect();
-        assert_eq!(ids, ["fraction", "script", "radical", "integral", "largeOperator", "bracket", "function", "accent", "limitLog", "operator", "matrix"]);
+        assert_eq!(
+            ids,
+            ["fraction", "script", "radical", "integral", "largeOperator", "bracket", "function", "accent", "limitLog", "operator", "matrix"]
+        );
         assert_eq!(g.templates().count(), 222);
         assert_eq!(g.symbols.len(), 8);
         assert_eq!(g.builtins.len(), 14);

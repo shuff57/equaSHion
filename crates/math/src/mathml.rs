@@ -1065,7 +1065,7 @@ mod tests {
             ),
             "x^2"
         );
-        assert_eq!(r(r#"<math><mfenced><mi>a</mi><mi>b</mi></mfenced></math>"#), r"\left(a\middle|b\right)");
+        assert_eq!(r(r#"<math><mfenced><mi>a</mi><mi>b</mi></mfenced></math>"#), r"\left(a,b\right)");
         assert_eq!(r(r#"<math><mrow><mo>(</mo><mi>x</mi><mo>)</mo></mrow></math>"#), r"\left(x\right)");
         assert_eq!(r(r#"<math><semantics><mrow><mi>x</mi></mrow><annotation encoding="TeX">x</annotation></semantics></math>"#), "x");
         assert_eq!(r(r#"<html><body><!--StartFragment--><math display="block"><mi>y</mi></math><!--EndFragment--></body></html>"#), "y");
