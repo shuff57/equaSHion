@@ -624,3 +624,21 @@ fn overlay_canvas_reports_its_baseline() {
     let (size, base) = (h.state().content_size().unwrap(), h.state().inline_baseline().unwrap());
     assert!(base > 0.0 && base < size.y, "baseline {base} inside height {}", size.y);
 }
+
+/// Display and text style lay out differently (a sum's limits go above and below in display
+/// style), so a host can match how it draws the equation.
+#[test]
+fn display_style_follows_the_host() {
+    let mk = |display: bool| {
+        let mut h = Harness::builder().with_size(vec2(600.0, 300.0)).build_ui_state(
+            |ui, ed: &mut EquationEditor| {
+                ed.show(ui);
+            },
+            EquationEditor::with_linear("sum_(i=1)^n i").inline(true).font_size(24.0).display_style(display).id_salt("style-test"),
+        );
+        h.run_steps(3);
+        h.state().content_size().expect("drew")
+    };
+    let (text, display) = (mk(false), mk(true));
+    assert!(display.y > text.y + 1.0, "limits stack in display style: {text:?} vs {display:?}");
+}

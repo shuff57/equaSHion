@@ -115,6 +115,9 @@ pub struct EquationEditor {
     /// Just the equation: no palette, linear field or message line, no background, sized to the
     /// equation, for editing in place on the host's page.
     inline: bool,
+    /// Lay the equation out in display style (large operators, limits above and below) or text
+    /// style, as the host's own drawing of it is. Default display, as a dialog shows it.
+    display_style: bool,
     /// With `inline`: the host draws the equation itself (it is the document's own); the widget
     /// draws only the caret, selection and active place over it.
     overlay: bool,
@@ -177,6 +180,7 @@ impl EquationEditor {
             show_linear: true,
             inline: false,
             overlay: false,
+            display_style: true,
             caret_blink: true,
             ed: Editor::new(Math::default()),
             linear: String::new(),
@@ -251,6 +255,20 @@ impl EquationEditor {
     pub fn inline(mut self, on: bool) -> Self {
         self.inline = on;
         self
+    }
+
+    /// Display style (the default) or text style, to match how the host draws the equation.
+    pub fn display_style(mut self, display: bool) -> Self {
+        self.display_style = display;
+        self
+    }
+
+    /// [`EquationEditor::display_style`] on an existing editor: the next frame lays out again.
+    pub fn set_display_style(&mut self, display: bool) {
+        if self.display_style != display {
+            self.display_style = display;
+            self.canvas = None;
+        }
     }
 
     /// With [`EquationEditor::inline`]: do not draw the equation, only the caret, selection and
@@ -550,7 +568,7 @@ impl EquationEditor {
             return;
         }
         // Ink in white on transparent; the painter tints it with the theme's text colour.
-        let layout = layout_equation(&*self.fonts, &shown, &self.family, self.font_size, true, Rgb::WHITE, EQ_PAD);
+        let layout = layout_equation(&*self.fonts, &shown, &self.family, self.font_size, self.display_style, Rgb::WHITE, EQ_PAD);
         // Never beyond the largest texture the GPU takes, however wide the equation grows.
         let scale = (MAX_TEXTURE / layout.width().max(layout.height()).max(1.0)).min(want);
         let img = equashion_render::render_scene(&layout.scene, &*self.fonts, scale, None);
