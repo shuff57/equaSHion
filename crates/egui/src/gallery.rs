@@ -19,6 +19,16 @@ use crate::{EquationEditor, palette};
 const COLUMNS_W: f32 = 340.0;
 
 impl EquationEditor {
+    /// A gallery's representative face (its first template, empty places as boxes) at `pt`
+    /// points, as a texture and its size in points, for a host that draws its own button.
+    /// Paint it with the button's text colour as the tint.
+    pub fn gallery_face(&mut self, ui: &Ui, gallery_id: &str, pt: f64) -> Option<(egui::TextureId, egui::Vec2)> {
+        let t = galleries().structure(gallery_id)?.sections.first()?.templates.first()?;
+        let face = Editor::new(t.math.clone()).display_math();
+        let sym = self.symbol(ui, &format!("face/{gallery_id}"), &face, pt)?;
+        Some((sym.texture_id(), sym.size()))
+    }
+
     /// One structure gallery (`"fraction"`, `"script"`, `"radical"`, `"integral"`,
     /// `"largeOperator"`, `"bracket"`, `"function"`, `"accent"`, `"limitLog"`, `"operator"`,
     /// `"matrix"`): its sections, each a heading over a wrapped run of template faces. Inserts

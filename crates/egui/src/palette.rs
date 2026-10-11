@@ -23,6 +23,16 @@ pub(crate) struct Symbol {
     size: Vec2,
 }
 
+impl Symbol {
+    pub(crate) fn texture_id(&self) -> egui::TextureId {
+        self.tex.id()
+    }
+
+    pub(crate) fn size(&self) -> Vec2 {
+        self.size
+    }
+}
+
 /// The short accessible label of a structure's palette button (WordCraft's button faces).
 pub fn label(id: &str) -> Option<&'static str> {
     Some(match id {
