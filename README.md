@@ -96,9 +96,9 @@ One centred column, top to bottom:
 
 - **Header**: the wordmark, the tagline and a System / Light / Dark theme toggle (System follows
   `prefers-color-scheme`).
-- **Editor**: a symbol palette in labelled groups (Structures, Greek, Operators, Relations; Arrows,
-  Brackets, Accents, Functions and the rest behind **More symbols**), then the `EquationEditor`
-  canvas. Every palette face is rendered by equashion-render, not by egui's fonts. A long
+- **Editor**: a symbol palette in tabs by context (Structures, Greek, Operators, Relations,
+  Logic and sets, Arrows, Functions), each tab split into labelled groups, then the `EquationEditor`
+canvas. Every palette face is rendered by equashion-render, not by egui's fonts. A long
   equation shrinks to half size and then scrolls sideways to keep the caret in view.
 - **Copy button** under the canvas: one full-width button with its format drop-down built in.
   The drop-down lists Copy LaTeX, Copy MathML (for ONLYOFFICE, LibreOffice Math and Word), Copy

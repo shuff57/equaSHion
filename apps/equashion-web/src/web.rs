@@ -21,7 +21,9 @@
 //! | `activeTab()` | always `editor` (the page has one view) |
 //! | `setTab(name)` | accepted and ignored; returns true |
 //! | `showAbout(on)` | opens or closes the About panel |
-//! | `setDisclosures(more, paste, howto)` | opens or closes the three disclosures |
+//! | `setDisclosures(paste, howto)` | opens or closes the paste-in and "How to type" disclosures |
+//! | `paletteTabs()` | the palette's tab titles, in order |
+//! | `setPaletteTab(title)` | selects a palette tab; false when there is no such title |
 //! | `unknownCommands()` | array of the equation's unknown backslash commands |
 //! | `theme()` | the theme in effect: `light` or `dark` |
 //! | `themePreference()` | `system`, `light` or `dark` |
@@ -349,12 +351,26 @@ fn install_hooks(s: Shared, ctx: egui::Context) -> Result<(), JsValue> {
     f.forget();
 
     let (a, c) = (s.clone(), ctx.clone());
-    let f = Closure::<dyn Fn(bool, bool, bool) -> bool>::new(move |more: bool, paste: bool, howto: bool| {
-        with(&a, |app| app.set_disclosures(more, paste, howto));
+    let f = Closure::<dyn Fn(bool, bool) -> bool>::new(move |paste: bool, howto: bool| {
+        with(&a, |app| app.set_disclosures(paste, howto));
         c.request_repaint();
         true
     });
     set(&obj, "setDisclosures", f.as_ref())?;
+    f.forget();
+
+    let (a, c) = (s.clone(), ctx.clone());
+    let f = Closure::<dyn Fn(String) -> bool>::new(move |title: String| {
+        let ok = with(&a, |app| app.set_palette_tab(&title));
+        c.request_repaint();
+        ok
+    });
+    set(&obj, "setPaletteTab", f.as_ref())?;
+    f.forget();
+
+    let a = s.clone();
+    let f = Closure::<dyn Fn() -> Array>::new(move || with(&a, |app| app.palette_tabs()).into_iter().map(JsValue::from_str).collect());
+    set(&obj, "paletteTabs", f.as_ref())?;
     f.forget();
 
     let (a, c) = (s.clone(), ctx.clone());

@@ -355,9 +355,18 @@ impl Showcase {
         self.about_open = on;
     }
 
-    /// Open or close the "More symbols", paste-in and "How to type" disclosures.
-    pub fn set_disclosures(&mut self, more: bool, import: bool, howto: bool) {
-        self.symbols.more_open = more;
+    /// Select a palette tab by title; false when there is none.
+    pub fn set_palette_tab(&mut self, title: &str) -> bool {
+        self.symbols.select_tab(title)
+    }
+
+    /// The titles of the palette tabs, in order.
+    pub fn palette_tabs(&self) -> Vec<&'static str> {
+        self.symbols.tab_titles()
+    }
+
+    /// Open or close the paste-in and "How to type" disclosures.
+    pub fn set_disclosures(&mut self, import: bool, howto: bool) {
         self.import_open = import;
         self.howto_open = howto;
     }

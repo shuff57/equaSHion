@@ -1,5 +1,5 @@
-//! The page's symbol palette: a few labelled groups of large buttons above the editor, the
-//! rarely used ones behind "More symbols". Every face is laid out and rasterised by
+//! The page's symbol palette: a tab bar above the editor (Structures, Greek, Operators, ...),
+//! each tab a few labelled groups of large buttons. Every face is laid out and rasterised by
 //! equashion-render from the bundled fonts (never egui's fonts), tinted with the theme's text
 //! colour. A button inserts at the editor's caret through `equashion_math::Editor`.
 
@@ -49,6 +49,12 @@ pub struct Group {
     pub items: Vec<Item>,
 }
 
+/// One tab of the palette: a context and the groups of buttons in it.
+pub struct Tab {
+    pub title: &'static str,
+    pub groups: Vec<Group>,
+}
+
 fn tpl(id: &'static str, label: &'static str) -> Option<Item> {
     template(id).map(|t| Item::Structure { id, label, math: t.math })
 }
@@ -63,122 +69,98 @@ fn symbols(s: &str) -> Vec<Item> {
     s.chars().map(Item::Symbol).collect()
 }
 
-/// The groups shown by default.
-pub fn main_groups() -> Vec<Group> {
-    vec![
-        Group {
-            title: "Structures",
-            items: [
-                tpl("frac", "Fraction"),
-                tpl("sup", "Superscript"),
-                tpl("sub", "Subscript"),
-                tpl("sqrt", "Square root"),
-                tpl("root", "Nth root"),
-                tpl("sum", "Sum"),
-                tpl("int", "Integral"),
-                tpl("intlim", "Definite integral"),
-                tpl("lim", "Limit"),
-                tpl("matrix2", "2 by 2 matrix"),
-                tpl("bmatrix2", "2 by 2 matrix, square brackets"),
-                tpl("cases", "Cases"),
-            ]
-            .into_iter()
-            .flatten()
-            .collect(),
-        },
-        Group { title: "Greek", items: symbols("αβγδεθλμπσφωΔΣΩ") },
-        Group { title: "Operators", items: symbols("±∓×÷·∘∞∂∇∪∩°′") },
-        Group { title: "Relations", items: symbols("≠≈≡≤≥≪≫∝∼∈∉⊂⊆") },
-    ]
+/// A group of templates (an id with no template is left out).
+fn templates(title: &'static str, items: &[(&'static str, &'static str)]) -> Group {
+    Group { title, items: items.iter().filter_map(|(id, label)| tpl(id, label)).collect() }
 }
 
-/// The groups behind "More symbols".
-pub fn more_groups() -> Vec<Group> {
+/// The group titled "Matrices and cases": the m x n builder is drawn right under it.
+pub const MATRIX_GROUP: &str = "Matrices and cases";
+
+/// Every palette button, in tabs by context.
+pub fn tabs() -> Vec<Tab> {
+    let sym = |title, s| Group { title, items: symbols(s) };
     vec![
-        Group {
-            title: "More structures",
-            items: [
-                tpl("subsup", "Sub and superscript"),
-                tpl("prod", "Product"),
-                tpl("matrix3", "3 by 3 matrix"),
-                tpl("bmatrix3", "3 by 3 matrix, square brackets"),
-                tpl("binom", "Binomial coefficient"),
-            ]
-            .into_iter()
-            .flatten()
-            .collect(),
+        Tab {
+            title: "Structures",
+            groups: vec![
+                templates(
+                    "Fractions and roots",
+                    &[("frac", "Fraction"), ("binom", "Binomial coefficient"), ("sqrt", "Square root"), ("root", "Nth root")],
+                ),
+                templates("Scripts", &[("sup", "Superscript"), ("sub", "Subscript"), ("subsup", "Sub and superscript")]),
+                templates(
+                    "Large operators",
+                    &[("sum", "Sum"), ("prod", "Product"), ("int", "Integral"), ("intlim", "Definite integral"), ("lim", "Limit")],
+                ),
+                Group {
+                    title: "Brackets",
+                    items: [tpl("paren", "Parentheses"), tpl("bracket", "Square brackets"), tpl("brace", "Braces"), tpl("abs", "Absolute value")]
+                        .into_iter()
+                        .flatten()
+                        .chain([
+                            pair("norm", "Norm", "\u{2016}", "\u{2016}"),
+                            pair("floor", "Floor", "\u{230A}", "\u{230B}"),
+                            pair("ceil", "Ceiling", "\u{2308}", "\u{2309}"),
+                            pair("angle", "Angle brackets", "\u{27E8}", "\u{27E9}"),
+                        ])
+                        .collect(),
+                },
+                templates(
+                    MATRIX_GROUP,
+                    &[
+                        ("matrix2", "2 by 2 matrix"),
+                        ("bmatrix2", "2 by 2 matrix, square brackets"),
+                        ("matrix3", "3 by 3 matrix"),
+                        ("bmatrix3", "3 by 3 matrix, square brackets"),
+                        ("cases", "Cases"),
+                    ],
+                ),
+                templates(
+                    "Accents",
+                    &[
+                        ("hat", "Hat"),
+                        ("bar", "Bar"),
+                        ("vec", "Vector arrow"),
+                        ("overline", "Overline"),
+                        ("underline", "Underline"),
+                        ("overbrace", "Overbrace"),
+                    ],
+                ),
+            ],
         },
-        Group { title: "Arrows", items: symbols("→←↔⇒⇐⇔↦↑↓") },
-        Group {
-            title: "Brackets",
-            items: [tpl("paren", "Parentheses"), tpl("bracket", "Square brackets"), tpl("brace", "Braces"), tpl("abs", "Absolute value")]
-                .into_iter()
-                .flatten()
-                .chain([
-                    pair("norm", "Norm", "\u{2016}", "\u{2016}"),
-                    pair("floor", "Floor", "\u{230A}", "\u{230B}"),
-                    pair("ceil", "Ceiling", "\u{2308}", "\u{2309}"),
-                    pair("angle", "Angle brackets", "\u{27E8}", "\u{27E9}"),
-                ])
-                .collect(),
+        Tab {
+            title: "Greek", groups: vec![sym("Lowercase", "αβγδεζηθικλμνξοπρστυφχψω"), sym("Uppercase", "ΓΔΘΛΞΠΣΦΨΩ")]
         },
-        Group {
-            title: "Accents",
-            items: [
-                tpl("hat", "Hat"),
-                tpl("bar", "Bar"),
-                tpl("vec", "Vector arrow"),
-                tpl("overline", "Overline"),
-                tpl("underline", "Underline"),
-                tpl("overbrace", "Overbrace"),
-            ]
-            .into_iter()
-            .flatten()
-            .collect(),
+        Tab { title: "Operators", groups: vec![sym("Arithmetic", "±∓×÷·∘∗"), sym("Calculus", "∞∂∇°′″")] },
+        Tab { title: "Relations", groups: vec![sym("Equality", "≠≈≡≅∼∝"), sym("Order", "≤≥≪≫≺≻")] },
+        Tab {
+            title: "Logic and sets", groups: vec![sym("Logic", "∧∨¬∀∃∴∵"), sym("Sets", "∅∪∩∈∉⊂⊆⊃⊇"), sym("Dots", "…⋯")]
         },
-        Group {
+        Tab { title: "Arrows", groups: vec![sym("Single", "→←↑↓↔↦"), sym("Double", "⇒⇐⇔")] },
+        Tab {
             title: "Functions",
-            items: [tpl("sin", "Sine"), tpl("cos", "Cosine"), tpl("tan", "Tangent"), tpl("log", "Logarithm"), tpl("ln", "Natural log")]
-                .into_iter()
-                .flatten()
-                .collect(),
+            groups: vec![
+                templates("Trigonometric", &[("sin", "Sine"), ("cos", "Cosine"), ("tan", "Tangent")]),
+                templates(
+                    "Hyperbolic",
+                    &[
+                        ("sinh", "Hyperbolic sine"),
+                        ("cosh", "Hyperbolic cosine"),
+                        ("tanh", "Hyperbolic tangent"),
+                        ("csch", "Hyperbolic cosecant"),
+                        ("sech", "Hyperbolic secant"),
+                        ("coth", "Hyperbolic cotangent"),
+                    ],
+                ),
+                templates("Logarithms", &[("log", "Logarithm"), ("ln", "Natural log")]),
+                templates(
+                    "Counting and rounding",
+                    &[("nCr", "Combinations"), ("nPr", "Permutations"), ("lcm", "Least common multiple"), ("round", "Round"), ("sign", "Sign")],
+                ),
+                templates("Statistics", &[("mean", "Mean"), ("median", "Median"), ("stdev", "Standard deviation"), ("var", "Variance")]),
+            ],
         },
-        Group {
-            title: "Hyperbolic",
-            items: [
-                tpl("sinh", "Hyperbolic sine"),
-                tpl("cosh", "Hyperbolic cosine"),
-                tpl("tanh", "Hyperbolic tangent"),
-                tpl("csch", "Hyperbolic cosecant"),
-                tpl("sech", "Hyperbolic secant"),
-                tpl("coth", "Hyperbolic cotangent"),
-            ]
-            .into_iter()
-            .flatten()
-            .collect(),
-        },
-        Group {
-            title: "Counting and rounding",
-            items: [
-                tpl("nCr", "Combinations"),
-                tpl("nPr", "Permutations"),
-                tpl("lcm", "Least common multiple"),
-                tpl("round", "Round"),
-                tpl("sign", "Sign"),
-            ]
-            .into_iter()
-            .flatten()
-            .collect(),
-        },
-        Group {
-            title: "Statistics",
-            items: [tpl("mean", "Mean"), tpl("median", "Median"), tpl("stdev", "Standard deviation"), tpl("var", "Variance")]
-                .into_iter()
-                .flatten()
-                .collect(),
-        },
-        Group { title: "More Greek", items: symbols("ζηικνξορτυχψΓΘΛΞΠΦΨ") },
-        Group { title: "Logic and sets", items: symbols("∧∨¬∀∃∅∗∴∵…⋯″≅≺≻⊃⊇") },
     ]
 }
 
@@ -197,12 +179,12 @@ const FACE_MAX_H: f32 = 26.0;
 const SYMBOL_PT: f64 = 20.0;
 const STRUCTURE_PT: f64 = 18.0;
 
-/// The palette state: the faces rendered so far and whether "More symbols" is open.
+/// The palette state: the faces rendered so far and the selected tab.
 pub struct Palette {
-    main: Vec<Group>,
-    more: Vec<Group>,
+    tabs: Vec<Tab>,
     faces: HashMap<String, Face>,
-    pub more_open: bool,
+    /// Index of the selected tab.
+    pub tab: usize,
     /// The size and brackets the "Insert matrix" button builds.
     pub mat_rows: usize,
     pub mat_cols: usize,
@@ -211,11 +193,27 @@ pub struct Palette {
 
 impl Default for Palette {
     fn default() -> Self {
-        Palette { main: main_groups(), more: more_groups(), faces: HashMap::new(), more_open: false, mat_rows: 2, mat_cols: 3, mat_square: false }
+        Palette { tabs: tabs(), faces: HashMap::new(), tab: 0, mat_rows: 2, mat_cols: 3, mat_square: false }
     }
 }
 
 impl Palette {
+    /// The titles of the tabs, in order.
+    pub fn tab_titles(&self) -> Vec<&'static str> {
+        self.tabs.iter().map(|t| t.title).collect()
+    }
+
+    /// Select the tab with this title; false when there is none.
+    pub fn select_tab(&mut self, title: &str) -> bool {
+        match self.tabs.iter().position(|t| t.title == title) {
+            Some(i) => {
+                self.tab = i;
+                true
+            }
+            None => false,
+        }
+    }
+
     fn face(&mut self, ui: &Ui, fonts: &FontDb, item: &Item) -> Option<&Face> {
         let ppp = ui.ctx().pixels_per_point();
         let key = format!("{}@{ppp}", item.key());
@@ -234,35 +232,27 @@ impl Palette {
         self.faces.get(&key)
     }
 
-    /// Draw the palette; returns the item clicked this frame.
+    /// Draw the tab bar and the selected tab's groups; returns the item clicked this frame.
     pub fn ui(&mut self, ui: &mut Ui, fonts: &FontDb, p: &crate::theme::Palette) -> Option<Item> {
         let mut clicked = None;
-        let main = std::mem::take(&mut self.main);
-        for g in &main {
+        let titles = self.tab_titles();
+        if let Some(i) = tab_bar(ui, p, &titles, self.tab) {
+            self.tab = i;
+        }
+        ui.add_space(crate::theme::S8);
+        let tab = self.tab.min(self.tabs.len().saturating_sub(1));
+        let groups = std::mem::take(&mut self.tabs[tab].groups);
+        for g in &groups {
             if let Some(i) = self.group(ui, fonts, p, g) {
                 clicked = Some(i);
             }
-        }
-        self.main = main;
-        if let Some(i) = self.matrix_builder(ui, p) {
-            clicked = Some(i);
-        }
-        ui.add_space(crate::theme::S4);
-        let label = if self.more_open { "Fewer symbols" } else { "More symbols" };
-        let r = disclosure(ui, p, label, self.more_open);
-        if r.clicked() {
-            self.more_open = !self.more_open;
-        }
-        if self.more_open {
-            ui.add_space(crate::theme::S8);
-            let more = std::mem::take(&mut self.more);
-            for g in &more {
-                if let Some(i) = self.group(ui, fonts, p, g) {
-                    clicked = Some(i);
-                }
+            if g.title == MATRIX_GROUP
+                && let Some(i) = self.matrix_builder(ui, p)
+            {
+                clicked = Some(i);
             }
-            self.more = more;
         }
+        self.tabs[tab].groups = groups;
         clicked
     }
 
@@ -353,6 +343,47 @@ fn button(ui: &mut Ui, face: &Face, label: &str, hover: &str) -> egui::Response 
     resp.on_hover_text(hover)
 }
 
+/// A tab bar: one label per tab, the selected one in the accent colour over a 2 px accent
+/// underline, a hairline under the row. Returns the tab clicked this frame.
+fn tab_bar(ui: &mut Ui, p: &crate::theme::Palette, titles: &[&'static str], selected: usize) -> Option<usize> {
+    let mut clicked = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = vec2(crate::theme::S4, crate::theme::S4);
+        for (i, title) in titles.iter().enumerate() {
+            let on = i == selected;
+            let font = egui::FontId::proportional(crate::theme::T_BODY);
+            let galley = ui.painter().layout_no_wrap((*title).to_string(), font, p.muted);
+            let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 20.0, 32.0), Sense::click());
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, *title));
+            if ui.is_rect_visible(rect) {
+                let painter = ui.painter();
+                if resp.hovered() && !on {
+                    painter.rect_filled(rect, crate::theme::R_CONTROL, p.control_hover);
+                }
+                let color = if on {
+                    p.accent
+                } else if resp.hovered() {
+                    ui.visuals().text_color()
+                } else {
+                    p.muted
+                };
+                let pos = rect.center() - galley.size() / 2.0;
+                painter.galley_with_override_text_color(pos2(pos.x.round(), pos.y.round()), galley, color);
+                if on {
+                    painter.hline(rect.min.x + 6.0..=rect.max.x - 6.0, rect.max.y - 1.0, egui::Stroke::new(2.0, p.accent));
+                }
+                if resp.has_focus() {
+                    painter.rect_stroke(rect, crate::theme::R_CONTROL, egui::Stroke::new(2.0, p.accent), egui::StrokeKind::Inside);
+                }
+            }
+            if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
+                clicked = Some(i);
+            }
+        }
+    });
+    clicked
+}
+
 /// A disclosure line: a chevron and a label, accent coloured, toggled by a click.
 pub fn disclosure(ui: &mut Ui, p: &crate::theme::Palette, label: &str, open: bool) -> egui::Response {
     let font = egui::FontId::proportional(crate::theme::T_BODY);
@@ -388,31 +419,50 @@ mod tests {
     use super::*;
     use equashion_math::{from_linear, to_latex};
 
+    fn all_items() -> Vec<(&'static str, Item)> {
+        tabs().into_iter().flat_map(|t| t.groups.into_iter().flat_map(|g| g.items.into_iter().map(move |i| (g.title, i)))).collect()
+    }
+
     #[test]
-    fn every_structure_exists_and_bracket_pairs_round_trip() {
-        let main = main_groups();
-        assert_eq!(main.iter().map(|g| g.title).collect::<Vec<_>>(), ["Structures", "Greek", "Operators", "Relations"]);
-        assert_eq!(main.first().map(|g| g.items.len()), Some(12), "a template id is missing");
-        assert_eq!(more_groups().first().map(|g| g.items.len()), Some(5), "a template id is missing");
-        let more = more_groups();
-        for g in main.iter().chain(&more) {
+    fn tabs_group_every_button_by_context() {
+        let t = tabs();
+        assert_eq!(
+            t.iter().map(|t| t.title).collect::<Vec<_>>(),
+            ["Structures", "Greek", "Operators", "Relations", "Logic and sets", "Arrows", "Functions"]
+        );
+        let structures = &t[0].groups;
+        assert_eq!(
+            structures.iter().map(|g| (g.title, g.items.len())).collect::<Vec<_>>(),
+            [("Fractions and roots", 4), ("Scripts", 3), ("Large operators", 5), ("Brackets", 8), (MATRIX_GROUP, 5), ("Accents", 6)],
+            "a template id is missing"
+        );
+        // A group title never repeats a tab title, so each label names one thing.
+        for g in t.iter().flat_map(|t| &t.groups) {
+            assert!(!t.iter().any(|x| x.title == g.title), "{}", g.title);
             assert!(!g.items.is_empty(), "{}", g.title);
-            for i in &g.items {
-                if let Item::Structure { math, label, .. } = i {
-                    let mut e = Editor::new(Math::default());
-                    e.type_str("x");
-                    e.insert_template(math);
-                    assert!(e.is_valid(), "{label}");
-                }
+        }
+    }
+
+    #[test]
+    fn every_structure_inserts_and_bracket_pairs_round_trip() {
+        for (title, i) in all_items() {
+            if let Item::Structure { math, label, .. } = i {
+                let mut e = Editor::new(Math::default());
+                e.type_str("x");
+                e.insert_template(&math);
+                assert!(e.is_valid(), "{title}: {label}");
             }
         }
         // The bracket pairs built here print as stretchy \left..\right LaTeX. (Read back, the
         // parser keeps them as plain characters: a known limit listed in About.)
-        for (want, i) in [("Vert", "norm"), ("lfloor", "floor"), ("lceil", "ceil"), ("langle", "angle")]
-            .into_iter()
-            .filter_map(|(w, id)| more.iter().flat_map(|g| &g.items).find(|i| matches!(i, Item::Structure { id: x, .. } if *x == id)).map(|i| (w, i)))
-        {
-            let Item::Structure { math, .. } = i else { continue };
+        let items = all_items();
+        for (want, id) in [("Vert", "norm"), ("lfloor", "floor"), ("lceil", "ceil"), ("langle", "angle")] {
+            let found = items.iter().find_map(|(_, i)| match i {
+                Item::Structure { id: x, math, .. } if *x == id => Some(math),
+                _ => None,
+            });
+            assert!(found.is_some(), "{id}");
+            let Some(math) = found else { continue };
             let mut e = Editor::new(Math::default());
             e.insert_template(math);
             e.type_str("x");
@@ -425,10 +475,15 @@ mod tests {
     #[test]
     fn no_symbol_is_listed_twice() {
         let mut seen = std::collections::HashSet::new();
-        for g in main_groups().iter().chain(&more_groups()) {
-            for i in &g.items {
-                assert!(seen.insert(i.key()), "{} twice", i.label());
-            }
+        for (_, i) in all_items() {
+            assert!(seen.insert(i.key()), "{} twice", i.label());
         }
+    }
+
+    #[test]
+    fn a_tab_can_be_selected_by_title() {
+        let mut p = Palette::default();
+        assert!(p.select_tab("Functions") && p.tab == 6);
+        assert!(!p.select_tab("Nope") && p.tab == 6);
     }
 }

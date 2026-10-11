@@ -9,7 +9,7 @@ use equashion_web::export::Data;
 use equashion_web::{COPY_GUIDE, CREDIT, CopyKind, EXAMPLES, HOW_TO_TYPE, Outcome, PASTE_LABEL, Showcase, ThemePref, corpus};
 
 fn harness_at(w: f32) -> Harness<'static, Showcase> {
-    let mut h = Harness::builder().with_size(vec2(w, 1000.0)).build_ui_state(
+    let mut h = Harness::builder().with_size(vec2(w, 1400.0)).build_ui_state(
         |ui, s: &mut Showcase| {
             s.ui(ui);
         },
@@ -180,27 +180,40 @@ fn examples_load_by_click() {
 }
 
 #[test]
-fn the_palette_inserts_and_more_symbols_opens() {
+fn the_palette_tabs_group_the_buttons_by_context() {
     let mut h = harness();
     h.state_mut().set_latex("");
     h.run();
-    for g in ["Structures", "Greek", "Operators", "Relations"] {
+    // Every tab is on the bar; only the first tab's groups are drawn.
+    for t in ["Structures", "Greek", "Operators", "Relations", "Logic and sets", "Arrows", "Functions"] {
+        h.get_by_label(t);
+    }
+    for g in ["Fractions and roots", "Scripts", "Large operators", "Brackets", "Matrices and cases", "Accents"] {
         h.get_by_label(g);
     }
-    assert!(h.query_by_label("Arrows").is_none());
+    assert!(h.query_by_label("Lowercase").is_none());
     h.get_by_label("Fraction").click();
     h.run();
     assert_eq!(h.state().latex(), r"\frac{}{}");
     h.state_mut().set_latex("");
     h.run();
+    h.get_by_label("Greek").click();
+    h.run();
+    assert!(h.query_by_label("Fraction").is_none());
+    for g in ["Lowercase", "Uppercase"] {
+        h.get_by_label(g);
+    }
     h.get_by_label("π").click();
     h.run();
     assert_eq!(h.state().latex(), r"\pi");
-    h.get_by_label("More symbols").click();
+    h.get_by_label("Functions").click();
     h.run();
-    for g in ["More structures", "Arrows", "Brackets", "Accents", "Functions", "More Greek", "Logic and sets", "Fewer symbols"] {
+    for g in ["Trigonometric", "Hyperbolic", "Logarithms", "Counting and rounding", "Statistics"] {
         h.get_by_label(g);
     }
+    assert!(h.state_mut().set_palette_tab("Arrows"));
+    h.run();
+    h.get_by_label("Double");
 }
 
 /// Type `s` into a fresh edit model.
