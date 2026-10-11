@@ -913,3 +913,19 @@ fn closing_a_parenthesis_ends_the_radical_function_or_denominator() {
     // Without parentheses the structure keeps taking what is typed, as before.
     assert_eq!(typed_linear("sqrt x+1"), "√(x+1)");
 }
+
+#[test]
+fn typed_call_names_become_function_nodes_at_the_parenthesis() {
+    for name in ["floor", "nCr", "mean", "abs", "stdev", "rref"] {
+        let e = typed(&format!("{name}(x"));
+        assert!(matches!(e.math().body.first(), Some(Node::Func { name: n, .. }) if n == name), "{name}: {:?}", e.math().body);
+        assert_eq!(e.caret().path.len(), 1, "{name}: the caret is in the argument");
+    }
+    // Bare-argument names convert as whole words, like sin.
+    assert!(matches!(typed("sech").math().body.first(), Some(Node::Func { name, .. }) if name == "sech"));
+    assert!(matches!(typed("arctanh").math().body.first(), Some(Node::Func { name, .. }) if name == "arctanh"));
+    assert!(matches!(typed("arccot").math().body.first(), Some(Node::Func { name, .. }) if name == "arccot"));
+    // A call-only name typed without a parenthesis is just letters; a plain "(" still nests.
+    assert!(!matches!(typed("floor").math().body.first(), Some(Node::Func { .. })));
+    assert!(matches!(typed("x(").math().body.get(1), Some(Node::Delim { .. })));
+}

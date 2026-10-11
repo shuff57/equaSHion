@@ -9,7 +9,8 @@
 //! are written without braces (`x^2`), delimiters are `\left..\right`, matrices use the
 //! `pmatrix`-style environments, upright words are `\operatorname{..}`.
 
-use crate::linear::{ACCENTS, FUNCS, GREEK, NARY, SYMS, raw_text};
+use crate::funcs::LATEX;
+use crate::linear::{ACCENTS, GREEK, NARY, SYMS, raw_text};
 use crate::{MAX_DEPTH, Math, Node, Seq, Style};
 
 /// Print an equation as LaTeX.
@@ -321,7 +322,7 @@ impl Tex {
 
     /// A function name: `\sin` for the standard commands, `\operatorname{..}` otherwise.
     fn function(&mut self, name: &str) {
-        if FUNCS.contains(&name) {
+        if LATEX.contains(&name) {
             self.cmd(name);
         } else {
             self.cmd("operatorname");
@@ -521,6 +522,26 @@ mod tests {
         assert_eq!(t(r"\sin(x)"), r"\sin\left(x\right)");
         assert_eq!(t(r"\sin x"), r"\sin\left(x\right)");
         assert_eq!(t(r"\ln(x)+\cos(x)"), r"\ln\left(x\right)+\cos\left(x\right)");
+    }
+
+    #[test]
+    fn desmos_function_names_print_as_operator_names() {
+        for name in crate::funcs::OPNAMES {
+            let want = format!("\\operatorname{{{name}}}\\left(x\\right)");
+            assert_eq!(t(&format!("{name}(x)")), want, "{name}");
+        }
+        assert_eq!(t("sech x"), r"\operatorname{sech}\left(x\right)");
+        assert_eq!(t("nCr(6,2)"), r"\operatorname{nCr}\left(6,2\right)");
+        assert_eq!(t("csch^2 x"), r"\operatorname{csch}^2 x");
+        // The LaTeX commands are unchanged.
+        assert_eq!(t("sinh(x)"), r"\sinh\left(x\right)");
+    }
+
+    #[test]
+    fn desmos_spellings() {
+        assert_eq!(t("infinity"), r"\infty");
+        assert_eq!(t("u cdot v"), r"u \cdot v");
+        assert_eq!(t("u cross v"), r"u \times v");
     }
 
     #[test]

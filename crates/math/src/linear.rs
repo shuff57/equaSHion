@@ -55,13 +55,7 @@ pub(crate) const GREEK: &[(&str, char)] = &[
     ("Omega", 'Ω'),
 ];
 
-pub(crate) const FUNCS: &[&str] = &[
-    "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "log", "ln", "exp", "lim", "max", "min", "det",
-    "gcd",
-];
-
-/// Functions that take a bare (unparenthesised) argument: `sin x`.
-const BARE_FUNCS: &[&str] = &["sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "log", "ln", "exp"];
+use crate::funcs::{self, BARE, LATEX};
 
 /// LaTeX-style symbol names.
 pub(crate) const SYMS: &[(&str, &str)] = &[
@@ -176,12 +170,12 @@ pub(crate) fn accent(name: &str) -> Option<char> {
 /// True for an upright function name (`sin`, `lim`, `max`) and for the operator words that print
 /// as plain text (`arg`, `mod`).
 pub(crate) fn is_function_word(name: &str) -> bool {
-    FUNCS.contains(&name) || PASS.contains(&name)
+    funcs::is_func(name) || PASS.contains(&name)
 }
 
 /// True when `name` is a function that takes a bare argument (`sin x`).
 pub(crate) fn is_bare_func(name: &str) -> bool {
-    BARE_FUNCS.contains(&name)
+    BARE.contains(&name)
 }
 
 /// Every command name the typed-LaTeX table knows, for prefix checks.
@@ -192,7 +186,7 @@ pub(crate) fn command_names() -> impl Iterator<Item = &'static str> {
         .chain(SYMS.iter().map(|(n, _)| *n))
         .chain(NARY.iter().map(|(n, _)| *n))
         .chain(ACCENTS.iter().map(|(n, _)| *n))
-        .chain(FUNCS.iter().copied())
+        .chain(LATEX.iter().copied())
         .chain(PASS.iter().copied())
 }
 
@@ -701,7 +695,7 @@ impl Parser {
                     push_node(out, n);
                 } else if let Some((_, sym)) = SYMS.iter().find(|(n, _)| *n == w) {
                     push_text(out, sym);
-                } else if FUNCS.contains(&w.as_str()) || PASS.contains(&w.as_str()) {
+                } else if LATEX.contains(&w.as_str()) || PASS.contains(&w.as_str()) {
                     push_text(out, &w);
                 } else {
                     // Unknown command: keep it visible, backslash included.
@@ -948,7 +942,9 @@ impl Parser {
             "differentialD" => return Some(Node::Text("d".into())),
             "exponentialE" => return Some(Node::Styled { text: "e".into(), style: Style::Plain }),
             "imaginaryI" => return Some(Node::Styled { text: "i".into(), style: Style::Plain }),
-            "times" => return Some(Node::Text("×".into())),
+            "times" | "cross" => return Some(Node::Text("×".into())),
+            "cdot" => return Some(Node::Text("·".into())),
+            "infinity" => return Some(Node::Text("∞".into())),
             _ => {}
         }
         if let Some((_, op)) = NARY.iter().find(|(n, _)| *n == w) {
@@ -959,7 +955,7 @@ impl Parser {
             let lim = self.atom(false);
             return Some(Node::Limit { lower: true, base: vec![Node::Styled { text: w.to_string(), style: Style::Plain }], lim });
         }
-        if FUNCS.contains(&w) {
+        if funcs::is_func(w) {
             // `\sin\left(2x\right)`: the sizing command is dropped, so the group is the argument.
             let save = self.pos;
             self.skip_ws();
@@ -967,13 +963,13 @@ impl Parser {
                 self.pos = save;
             }
         }
-        if FUNCS.contains(&w) && self.peek() == Some('{') && self.depth < MAX_DEPTH {
+        if funcs::is_func(w) && self.peek() == Some('{') && self.depth < MAX_DEPTH {
             // `\sin{x}`: a braced argument is the function's argument.
             let body = self.brace_arg();
             return Some(Node::Func { name: w.to_string(), body });
         }
         if self.peek() == Some('(') && self.depth < MAX_DEPTH {
-            if FUNCS.contains(&w) {
+            if funcs::is_func(w) {
                 let body = self.group()?;
                 return Some(Node::Func { name: w.to_string(), body });
             }
@@ -1051,11 +1047,11 @@ impl Parser {
                 _ => {}
             }
         }
-        if FUNCS.contains(&w) && matches!(self.peek(), Some('^' | '_')) {
+        if funcs::is_func(w) && matches!(self.peek(), Some('^' | '_')) {
             // `sin^2 x`, `log_2 x`: keep the name whole so the script attaches to it.
             return Some(Node::Styled { text: w.to_string(), style: Style::Plain });
         }
-        if BARE_FUNCS.contains(&w) && self.depth < MAX_DEPTH {
+        if BARE.contains(&w) && self.depth < MAX_DEPTH {
             // `sin x`, `ln 2`, `cos\theta`: an unparenthesised argument.
             let save = self.pos;
             self.skip_ws();
@@ -1642,7 +1638,7 @@ fn seq(out: &mut String, s: &Seq, depth: usize) {
                 let b = lin(base, d);
                 let ba = base_atomic(&b)
                     || matches!(base.as_slice(), [Node::Delim { .. }])
-                    || matches!(base.as_slice(), [Node::Styled { text, .. }] if FUNCS.contains(&text.as_str()));
+                    || matches!(base.as_slice(), [Node::Styled { text, .. }] if funcs::is_func(text));
                 out.push_str(&paren(b, ba));
                 limits(out, sub, sup, d);
             }

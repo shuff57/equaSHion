@@ -23,9 +23,20 @@ fn nary(op: char, limits: bool) -> Node {
     Node::Nary { op, sub: limits.then(slot), sup: limits.then(slot), body: slot() }
 }
 
-/// A parenthesised matrix (a bare grid reads as a mistake to most people).
-fn matrix(r: usize, c: usize) -> Node {
+/// A bracketed matrix (a bare grid reads as a mistake to most people).
+fn matrix(r: usize, c: usize, open: &str, close: &str) -> Node {
     let grid = Node::Matrix { rows: (0..r).map(|_| (0..c).map(|_| slot()).collect()).collect() };
+    Node::Delim { open: open.into(), close: close.into(), sep: "|".into(), items: vec![vec![grid]] }
+}
+
+/// An empty `rows` x `cols` matrix in the given brackets, as a one-node equation.
+pub fn matrix_template(rows: usize, cols: usize, open: &str, close: &str) -> Math {
+    Math::new(vec![matrix(rows.max(1), cols.max(1), open, close)])
+}
+
+/// `(n over k)`: a two-row, one-column matrix in parentheses, as `\binom` reads.
+fn binom() -> Node {
+    let grid = Node::Matrix { rows: vec![vec![slot()], vec![slot()]] };
     Node::Delim { open: "(".into(), close: ")".into(), sep: "|".into(), items: vec![vec![grid]] }
 }
 
@@ -52,13 +63,31 @@ pub fn templates() -> Vec<Template> {
         mk("bracket", "Square brackets", "Brackets", delim("[", "]")),
         mk("brace", "Braces", "Brackets", delim("{", "}")),
         mk("abs", "Absolute value", "Brackets", delim("|", "|")),
-        mk("matrix2", "2 x 2 matrix", "Matrices", matrix(2, 2)),
-        mk("matrix3", "3 x 3 matrix", "Matrices", matrix(3, 3)),
+        mk("matrix2", "2 x 2 matrix", "Matrices", matrix(2, 2, "(", ")")),
+        mk("matrix3", "3 x 3 matrix", "Matrices", matrix(3, 3, "(", ")")),
+        mk("bmatrix2", "2 x 2 matrix, square brackets", "Matrices", matrix(2, 2, "[", "]")),
+        mk("bmatrix3", "3 x 3 matrix, square brackets", "Matrices", matrix(3, 3, "[", "]")),
+        mk("binom", "Binomial coefficient", "Fractions", binom()),
         mk("sin", "Sine", "Functions", func("sin")),
         mk("cos", "Cosine", "Functions", func("cos")),
         mk("tan", "Tangent", "Functions", func("tan")),
         mk("log", "Logarithm", "Functions", func("log")),
         mk("ln", "Natural log", "Functions", func("ln")),
+        mk("sinh", "Hyperbolic sine", "Functions", func("sinh")),
+        mk("cosh", "Hyperbolic cosine", "Functions", func("cosh")),
+        mk("tanh", "Hyperbolic tangent", "Functions", func("tanh")),
+        mk("csch", "Hyperbolic cosecant", "Functions", func("csch")),
+        mk("sech", "Hyperbolic secant", "Functions", func("sech")),
+        mk("coth", "Hyperbolic cotangent", "Functions", func("coth")),
+        mk("round", "Round", "Functions", func("round")),
+        mk("sign", "Sign", "Functions", func("sign")),
+        mk("nCr", "Combinations", "Functions", func("nCr")),
+        mk("nPr", "Permutations", "Functions", func("nPr")),
+        mk("lcm", "Least common multiple", "Functions", func("lcm")),
+        mk("mean", "Mean", "Functions", func("mean")),
+        mk("median", "Median", "Functions", func("median")),
+        mk("stdev", "Standard deviation", "Functions", func("stdev")),
+        mk("var", "Variance", "Functions", func("var")),
         Template {
             id: "lim",
             label: "Limit",

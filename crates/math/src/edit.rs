@@ -427,9 +427,6 @@ const WORDS: &[(&str, char)] = &[
     ("exists", '\u{2203}'),
 ];
 
-/// Function names that turn into an upright function node when typed whole.
-const FUNCS: &[&str] = &["sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh", "log", "ln", "exp"];
-
 /// Characters after which an unparenthesised function argument (`sin x`) is over.
 const ARG_ENDERS: &str = "+\u{2212}=<>,\u{B1}\u{D7}\u{B7}";
 
@@ -784,7 +781,11 @@ impl Editor {
             '^' => self.script(true),
             '_' => self.script(false),
             '/' => self.fraction(),
-            '(' => self.open_delim("(", ")"),
+            '(' => {
+                if !self.convert_call() {
+                    self.open_delim("(", ")");
+                }
+            }
             '[' => self.open_delim("[", "]"),
             '{' => self.open_delim("{", "}"),
             ')' | ']' | '}' => {
@@ -1074,7 +1075,8 @@ impl Editor {
         }
     }
 
-    /// `h` right after `sin`, `cos` or `tan` (empty argument) makes `sinh`, `cosh`, `tanh`.
+    /// `h` right after a trigonometric name (empty argument) makes its hyperbolic form:
+    /// `sinh`, `cosh`, `tanh`, `csch`, `sech`, `coth`, `arcsinh`, `arccosh`, `arctanh`.
     fn extend_func_name(&mut self) -> bool {
         if self.selection().is_some() || self.len_here() != 0 {
             return false;
@@ -1085,7 +1087,8 @@ impl Editor {
         let Some(Node::Func { name, .. }) = seq_at_mut(&mut self.math.body, &parent).and_then(|s| s.get_mut(i)).map(bare_mut) else {
             return false;
         };
-        if matches!(name.as_str(), "sin" | "cos" | "tan") {
+        if matches!(name.as_str(), "sin" | "cos" | "tan" | "csc" | "sec" | "cot" | "arcsin" | "arccos" | "arctan") {
+            // `csc`, `sec` and `cot` take an `h` to become `csch`, `sech` and `coth`.
             name.push('h');
             true
         } else {
@@ -1436,6 +1439,29 @@ impl Editor {
         }
     }
 
+    /// `floor(`, `nCr(`: a function name typed just before `(` becomes a function node with the
+    /// caret in its argument, and the `(` is that argument's own.
+    fn convert_call(&mut self) -> bool {
+        if self.selection().is_some() || !self.can_nest() {
+            return false;
+        }
+        let cls = unit_chars(self.seq());
+        let pos = self.caret.pos.min(cls.len());
+        let mut s = pos;
+        while s > 0 && matches!(cls.get(s - 1), Some(Some(c)) if c.is_ascii_alphabetic()) {
+            s -= 1;
+        }
+        let run: String = cls.get(s..pos).unwrap_or(&[]).iter().filter_map(|c| *c).collect();
+        if !crate::funcs::is_call_only(&run) {
+            return false;
+        }
+        self.delete_range(s, pos);
+        let Some(i) = self.insert_nodes(vec![Node::Func { name: run, body: vec![] }]) else { return true };
+        self.caret.path.push((i, 0));
+        self.caret.pos = 0;
+        true
+    }
+
     /// A whole typed word (`pm`, `sin`, `sum`, `lim`...) becomes its symbol or structure.
     fn convert_word(&mut self, run: &str, pos: usize) -> bool {
         let n = run.chars().count();
@@ -1444,7 +1470,7 @@ impl Editor {
             self.insert_char(*sym);
             return true;
         }
-        let node = if FUNCS.contains(&run) {
+        let node = if crate::funcs::BARE.contains(&run) {
             Some((Node::Func { name: run.to_string(), body: vec![] }, 0))
         } else if let Some(&(_, op, limits)) =
             [("sum", '\u{2211}', true), ("prod", '\u{220F}', true), ("int", '\u{222B}', false)].iter().find(|(w, ..)| *w == run)
