@@ -567,10 +567,27 @@ impl Showcase {
         self.copy_rects.clear();
         let kind = self.copy_kind;
         // One big button with its format drop-down attached, then the inline confirmation.
+        let mut row_left = ui.cursor().min.x;
         let chevron = ui
             .horizontal(|ui| {
                 ui.spacing_mut().item_spacing = vec2(2.0, S8);
-                let r = split_main(ui, p, kind.title()).on_hover_text(kind.hint());
+                // The inline confirmation, for two seconds, replaces the label on the button.
+                let mut label = kind.title();
+                if let Some(s) = self.status.as_mut()
+                    && let Some(o) = s.outcome
+                    && o != Outcome::Blocked
+                {
+                    let at = *s.shown_at.get_or_insert(now);
+                    if now - at < CONFIRM_SECS {
+                        label = if o == Outcome::Downloaded { "Downloaded" } else { "Copied" };
+                        ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+                    } else {
+                        self.status = None;
+                    }
+                }
+                let width = (ui.available_width() - BUTTON_H - ui.spacing().item_spacing.x).max(0.0);
+                let r = split_main(ui, p, label, width).on_hover_text(kind.hint());
+                row_left = r.rect.left();
                 self.copy_rects.push((kind, r.rect));
                 if r.clicked() {
                     pressed = Some(kind);
@@ -579,21 +596,6 @@ impl Showcase {
                 if c.clicked() {
                     toggle_menu = true;
                 }
-                // The inline confirmation, for two seconds.
-                if let Some(s) = self.status.as_mut()
-                    && let Some(o) = s.outcome
-                    && o != Outcome::Blocked
-                {
-                    let at = *s.shown_at.get_or_insert(now);
-                    if now - at < CONFIRM_SECS {
-                        ui.add_space(S12);
-                        let text = if o == Outcome::Downloaded { "Downloaded" } else { "Copied" };
-                        ui.label(RichText::new(text).size(T_BODY).color(p.accent_text));
-                        ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
-                    } else {
-                        self.status = None;
-                    }
-                }
                 c
             })
             .inner;
@@ -601,20 +603,21 @@ impl Showcase {
             // Below the button; above it when the six rows would run off the bottom of the window.
             let below = ui.ctx().content_rect().max.y - chevron.rect.bottom() >= MENU_H;
             let (anchor, pivot) = if below {
-                (chevron.rect.left_bottom() + vec2(0.0, S4), egui::Align2::LEFT_TOP)
+                (pos2(row_left, chevron.rect.bottom() + S4), egui::Align2::LEFT_TOP)
             } else {
-                (chevron.rect.left_top() - vec2(0.0, S4), egui::Align2::LEFT_BOTTOM)
+                (pos2(row_left, chevron.rect.top() - S4), egui::Align2::LEFT_BOTTOM)
             };
             let area = egui::Area::new(egui::Id::new("equashion-copy-menu")).order(egui::Order::Foreground).pivot(pivot).fixed_pos(anchor).show(
                 ui.ctx(),
                 |ui| {
                     Frame::popup(ui.style()).show(ui, |ui| {
-                        ui.set_min_width(230.0);
+                        ui.set_min_width((chevron.rect.right() - row_left - 2.0 * S8).max(230.0));
                         ui.spacing_mut().item_spacing = vec2(S4, S4);
                         for k in CopyKind::ALL {
                             let r = ui.add(
                                 egui::Button::new(RichText::new(k.title()).size(T_BODY))
                                     .min_size(vec2(ui.available_width(), BUTTON_H))
+                                    .frame(false)
                                     .selected(k == kind)
                                     .wrap_mode(egui::TextWrapMode::Extend),
                             );
@@ -841,13 +844,13 @@ fn main_button(ui: &mut Ui, p: &Palette, text: &str, primary: bool) -> egui::Res
 const MENU_H: f32 = 6.0 * (BUTTON_H + S4) + 2.0 * S8;
 
 /// The big accent Copy button of the split control.
-fn split_main(ui: &mut Ui, p: &Palette, text: &str) -> egui::Response {
+fn split_main(ui: &mut Ui, p: &Palette, text: &str, width: f32) -> egui::Response {
     ui.scope(|ui| {
         accent_fill(ui, p);
         ui.spacing_mut().button_padding = vec2(S24, S8);
         ui.add(
             egui::Button::new(RichText::new(text).size(T_BODY + 1.0).strong())
-                .min_size(vec2(0.0, BUTTON_H + 4.0))
+                .min_size(vec2(width, BUTTON_H + 4.0))
                 .wrap_mode(egui::TextWrapMode::Extend),
         )
     })
