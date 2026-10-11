@@ -295,6 +295,23 @@ fn first_empty(seq: &[Node], depth: usize) -> Option<Path> {
     None
 }
 
+/// [`first_empty`], except that a leading script with an empty base (`ⁿC_r`: the n before the
+/// letter) is a place of its own: the caret goes to its script, not to its base.
+fn first_empty_skipping_prescript(nodes: &[Node]) -> Option<Path> {
+    let lead = match nodes.first() {
+        Some(n @ Node::Script { base, sub, sup }) if nodes.len() > 1 && base.is_empty() && (sub.is_some() || sup.is_some()) => n,
+        _ => return first_empty(nodes, 0),
+    };
+    if let Some(c) = children(lead).iter().enumerate().skip(1).find_map(|(c, ch)| (units(ch) == 0).then_some(c)) {
+        return Some(vec![(0, c)]);
+    }
+    let mut rest = first_empty(nodes.get(1..)?, 0)?;
+    if let Some(first) = rest.first_mut() {
+        first.0 += 1;
+    }
+    Some(rest)
+}
+
 /// Where Up / Down goes from child `c` of `node`, if the structure stacks its children.
 fn vertical_neighbor(node: &Node, c: usize, up: bool) -> Option<usize> {
     match node.bare() {
@@ -1547,7 +1564,7 @@ impl Editor {
             return;
         }
         let selected = self.selection().map(|(a, b)| self.take_range(a, b)).unwrap_or_default();
-        let target = first_empty(&nodes, 0);
+        let target = first_empty_skipping_prescript(&nodes);
         let mut land = units(&selected);
         if let Some(rel) = &target
             && !selected.is_empty()
@@ -1639,6 +1656,7 @@ impl Editor {
     /// numerator, out of the last place. Stays put at the ends.
     fn tab(&mut self, back: bool) {
         let start = self.caret.path.clone();
+        let from_prescript = !back && self.in_prescript();
         for _ in 0..MAX_TAB_STEPS {
             let before = self.caret.clone();
             if back {
@@ -1647,9 +1665,28 @@ impl Editor {
                 self.move_right();
             }
             if self.caret.path != start || self.caret == before {
-                return;
+                break;
             }
         }
+        // Out of the n of `ⁿC_r`: straight into the r.
+        if from_prescript
+            && self.caret.path.len() + 1 == start.len()
+            && let Some((i, false, kids, true)) = self.unit_info(self.caret.pos)
+            && kids >= 2
+            && self.caret.path.len() < MAX_DEPTH
+        {
+            self.caret.path.push((i, 1));
+            self.caret.pos = 0;
+        }
+    }
+
+    /// The caret is in a script of a script node whose base is empty (the n of `ⁿC_r`).
+    fn in_prescript(&self) -> bool {
+        let Some((&(i, c), parent)) = self.caret.path.split_last() else { return false };
+        c > 0
+            && seq_at(&self.math.body, parent)
+                .and_then(|s| s.get(i))
+                .is_some_and(|n| matches!(n.bare(), Node::Script { base, .. } if base.is_empty()))
     }
 
     fn extend(&mut self, key: Key) {
@@ -1925,10 +1962,16 @@ impl Editor {
             if depth > MAX_DEPTH {
                 return;
             }
-            for n in seq.iter_mut() {
-                for child in children_mut(n) {
+            let len = seq.len();
+            for (i, n) in seq.iter_mut().enumerate() {
+                // A script with nothing before it and something after (the n of `ⁿC_r`) has no
+                // base to show: only its scripts are places.
+                let prescript = i + 1 < len && matches!(n, Node::Script { base, sub, sup } if base.is_empty() && (sub.is_some() || sup.is_some()));
+                for (c, child) in children_mut(n).into_iter().enumerate() {
                     if units(child) == 0 {
-                        *child = vec![Node::Text("\u{25A1}".into())];
+                        if !(prescript && c == 0) {
+                            *child = vec![Node::Text("\u{25A1}".into())];
+                        }
                     } else {
                         fill(child, depth + 1);
                     }

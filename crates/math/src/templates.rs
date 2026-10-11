@@ -46,6 +46,14 @@ fn call2(id: &'static str, label: &'static str, name: &str) -> Template {
     Template { id, label, group: "Functions", math: Math::new(vec![Node::Func { name: name.into(), body: vec![args] }]) }
 }
 
+/// `ⁿC_r`: the letter with a place before it (n) and one after it (r), as in the textbook
+/// notation for combinations and permutations.
+fn choose(id: &'static str, label: &'static str, letter: &str) -> Template {
+    let n = Node::Script { base: vec![], sub: None, sup: Some(slot()) };
+    let c = Node::Script { base: vec![Node::Text(letter.into())], sub: Some(slot()), sup: None };
+    Template { id, label, group: "Functions", math: Math::new(vec![n, c]) }
+}
+
 fn mk(id: &'static str, label: &'static str, group: &'static str, n: Node) -> Template {
     Template { id, label, group, math: Math::new(vec![n]) }
 }
@@ -87,8 +95,8 @@ pub fn templates() -> Vec<Template> {
         mk("coth", "Hyperbolic cotangent", "Functions", func("coth")),
         mk("round", "Round", "Functions", func("round")),
         mk("sign", "Sign", "Functions", func("sign")),
-        call2("nCr", "Combinations", "nCr"),
-        call2("nPr", "Permutations", "nPr"),
+        choose("nCr", "Combinations", "C"),
+        choose("nPr", "Permutations", "P"),
         call2("lcm", "Least common multiple", "lcm"),
         mk("mean", "Mean", "Functions", func("mean")),
         mk("median", "Median", "Functions", func("median")),

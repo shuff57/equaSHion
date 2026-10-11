@@ -931,14 +931,25 @@ fn typed_call_names_become_function_nodes_at_the_parenthesis() {
 }
 
 #[test]
-fn two_argument_function_templates_have_a_place_for_each_argument() {
-    for (id, name) in [("nCr", "nCr"), ("nPr", "nPr"), ("lcm", "lcm")] {
+fn choose_templates_have_a_place_where_n_and_r_go() {
+    for (id, letter) in [("nCr", "C"), ("nPr", "P")] {
         let Some(t) = template(id) else { panic!("{id}") };
         let mut e = Editor::new(Math::default());
         e.insert_template(&t.math);
         e.type_str("5");
         e.key(Key::Tab, false);
         e.type_str("2");
-        assert_eq!(e.latex(), format!("\\operatorname{{{name}}}\\left(5,2\\right)"), "{id}");
+        assert_eq!(e.latex(), format!("{{}}^5{letter}_2"), "{id}");
     }
+}
+
+#[test]
+fn lcm_template_has_a_place_for_each_argument() {
+    let Some(t) = template("lcm") else { panic!("lcm") };
+    let mut e = Editor::new(Math::default());
+    e.insert_template(&t.math);
+    e.type_str("4");
+    e.key(Key::Tab, false);
+    e.type_str("6");
+    assert_eq!(e.latex(), "\\operatorname{lcm}\\left(4,6\\right)");
 }
