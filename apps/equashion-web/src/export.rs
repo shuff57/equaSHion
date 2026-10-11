@@ -69,12 +69,12 @@ impl CopyKind {
     /// The button label.
     pub fn title(self) -> &'static str {
         match self {
-            CopyKind::Latex => "Copy LaTeX",
-            CopyKind::MathMl => "Copy MathML",
-            CopyKind::Image => "Copy image",
-            CopyKind::Omml => "Copy OMML",
-            CopyKind::Text => "Copy text",
-            CopyKind::Svg => "Download SVG",
+            CopyKind::Latex => "Copy LaTeX (Overleaf, Markdown, Anki)",
+            CopyKind::MathMl => "Copy MathML (ONLYOFFICE, LibreOffice Math, Word)",
+            CopyKind::Image => "Copy image (PNG, pastes anywhere)",
+            CopyKind::Omml => "Copy OMML (Word equation XML)",
+            CopyKind::Text => "Copy text (plain, like a/b)",
+            CopyKind::Svg => "Download SVG (black ink)",
         }
     }
 
@@ -82,7 +82,9 @@ impl CopyKind {
     pub fn hint(self) -> &'static str {
         match self {
             CopyKind::Latex => "LaTeX source, for Overleaf, Markdown with math, Anki or any LaTeX editor",
-            CopyKind::MathMl => "A MathML equation. ONLYOFFICE pastes it as an equation; for Word, see the line below",
+            CopyKind::MathMl => {
+                "MathML. ONLYOFFICE: paste it as an equation. LibreOffice: Math, Tools > Import MathML from Clipboard. Word: Paste Special > Unformatted Text. Calibre and other e-book tools read MathML in HTML"
+            }
             CopyKind::Image => "A PNG picture of the equation, black on white",
             CopyKind::Omml => "Office Math XML (an m:oMath element), for programs and code that read OMML",
             CopyKind::Text => "Plain linear text such as a/b and x^2",

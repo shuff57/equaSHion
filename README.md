@@ -100,9 +100,10 @@ One centred column, top to bottom:
   Brackets, Accents, Functions and the rest behind **More symbols**), then the `EquationEditor`
   canvas. Every palette face is rendered by equashion-render, not by egui's fonts. A long
   equation shrinks to half size and then scrolls sideways to keep the caret in view.
-- **Copy row** under the canvas: Copy LaTeX, Copy MathML, Copy image and **More**, which opens
-  a second row with Copy OMML, Copy text and Download SVG. Neither row wraps at 700 px. One line
-  under it says where each format pastes. Then the current LaTeX in a read-only line you can
+- **Copy button** under the canvas: one full-width button with its format drop-down built in.
+  The drop-down lists Copy LaTeX, Copy MathML (for ONLYOFFICE, LibreOffice Math and Word), Copy
+  image, Copy OMML (Word equation XML), Copy text and Download SVG; picking one makes it the
+  button's format. One line under it says where each format pastes. Then the current LaTeX in a read-only line you can
   select.
 - **Paste LaTeX, MathML or OMML** (a disclosure): a field and a Load button that replaces the equation.
 - **Try it**: ten examples from `corpus/equations.tsv`, and **How to type**, a short cheat sheet
@@ -232,7 +233,7 @@ The smoke test uses its own playwright-cli session (`equashion`). It checks the 
 Copy payload (MathML that starts with the exact header, parses with the browser's XML parser with
 the MathML namespace on the root and has no named entities, the same `<math>` in the HTML
 fragment; OMML with `m:f` for a fraction; PNG magic bytes; an `<svg` document), clicks Copy LaTeX,
-Copy MathML and (after More) Copy OMML for real and records what the page hands the clipboard,
+Copy MathML and Copy OMML (picked from the drop-down) for real and records what the page hands the clipboard,
 dispatches real paste events with MathML, OMML, LaTeX and linear text, pastes the output of
 `copy('mathml')` back in, loads every example, and saves screenshots
 in both themes at 1280 and 700 px wide (closed, and with every disclosure and About open) to

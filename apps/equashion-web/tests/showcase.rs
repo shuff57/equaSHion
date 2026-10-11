@@ -50,7 +50,7 @@ fn copy_buttons_queue_their_payloads() {
     h.state_mut().set_latex(r"\frac{a}{b}");
     h.run();
     // One big button; every format is behind its drop-down.
-    h.get_by_label("Copy LaTeX");
+    h.get_by_label(CopyKind::Latex.title());
     for kind in CopyKind::MORE {
         assert!(h.query_by_label(kind.title()).is_none(), "{kind:?} is shown before the drop-down opens");
     }
@@ -323,14 +323,14 @@ fn every_how_to_type_line_does_what_it_says() {
 fn the_copy_button_and_its_drop_down_stay_on_one_line_at_1280_and_700_px() {
     for w in [1280.0, 700.0] {
         let mut h = harness_at(w);
-        let main = h.get_by_label("Copy LaTeX").rect();
+        let main = h.get_by_label(CopyKind::Latex.title()).rect();
         let arrow = h.get_by_label("Choose format").rect();
         assert!(main.height() >= 36.0 && main.width() > arrow.width(), "{w}: {main:?} {arrow:?}");
         assert!((main.min.y - arrow.min.y).abs() < 0.5 && main.max.x <= arrow.min.x + 0.5, "{w}: {main:?} {arrow:?}");
         h.state_mut().set_more_copy(true);
         h.run();
         let items: Vec<egui::Rect> = CopyKind::ALL.iter().skip(1).map(|k| h.get_by_label(k.title()).rect()).collect();
-        let main = h.get_all_by_label("Copy LaTeX").next().expect("main button").rect();
+        let main = h.get_all_by_label(CopyKind::Latex.title()).next().expect("main button").rect();
         // Below the button, or above it when there is no room: never over it.
         let below = items.iter().all(|r| r.min.y > main.max.y);
         let above = items.iter().all(|r| r.max.y < main.min.y);
@@ -349,8 +349,17 @@ fn the_copy_guide_is_one_line_of_true_claims() {
     // One sentence.
     assert!(COPY_GUIDE.ends_with('.') && COPY_GUIDE.matches(". ").count() == 0, "{COPY_GUIDE}");
     assert!(!COPY_GUIDE.contains("LibreOffice"));
-    assert_eq!(CopyKind::MAIN.map(CopyKind::title), ["Copy LaTeX", "Copy MathML", "Copy image"]);
-    assert_eq!(CopyKind::MORE.map(CopyKind::title), ["Copy OMML", "Copy text", "Download SVG"]);
+    assert_eq!(
+        CopyKind::ALL.map(CopyKind::title),
+        [
+            "Copy LaTeX (Overleaf, Markdown, Anki)",
+            "Copy MathML (ONLYOFFICE, LibreOffice Math, Word)",
+            "Copy image (PNG, pastes anywhere)",
+            "Copy OMML (Word equation XML)",
+            "Copy text (plain, like a/b)",
+            "Download SVG (black ink)",
+        ]
+    );
     assert_eq!(CopyKind::parse("word"), Some(CopyKind::MathMl));
     assert_eq!(CopyKind::parse("MATHML"), Some(CopyKind::MathMl));
 }
