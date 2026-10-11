@@ -7,6 +7,7 @@
 
 mod edit;
 mod funcs;
+mod gallery;
 mod latex;
 mod linear;
 mod mathml;
@@ -20,6 +21,7 @@ pub use latex::to_latex;
 pub use linear::{from_linear, to_linear, unknown_commands};
 pub use mathml::{MATHML_NS, MAX_MATHML, MathmlError, from_mathml, to_mathml, to_mathml_display};
 pub use omml::{OMATH_BREAK, OMML_NS, from_omml, to_omml};
+pub use gallery::{Gallery, GalleryTemplate, Galleries, Section, SymbolSet, galleries};
 pub use templates::{Template, matrix_template, template, templates};
 
 use serde::{Deserialize, Serialize};

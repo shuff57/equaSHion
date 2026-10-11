@@ -214,3 +214,11 @@ unchanged; they keep the upstream copyright line ("ArtCraft Team and the WordCra
 contributors"), which both licences require to be preserved. `NOTICE` is rewritten for this
 repository: it keeps that copyright line, adds "Modified by shuff57, 2026", and lists only the
 third-party material bundled here.
+
+## Galleries (`crates/math/src/gallery.rs`, `gallery.json`)
+
+The structure galleries (fractions through matrices, 222 templates), the eight symbol sets and the
+fourteen ready-made equations are WordCraft's `math_gallery.rs` at v0.5.0 (e4b7d15, Apache-2.0),
+exported once through WordCraft's own OMML writer and equaSHion's OMML reader, so each entry is an
+equaSHion tree. Only the ids, labels, linear text and symbols are carried; the font properties
+WordCraft attaches to every node were dropped.

@@ -54,7 +54,7 @@ pub fn label(id: &str) -> Option<&'static str> {
 
 /// A palette button: the rendered face tinted with the widget text colour, the egui button
 /// frame, and an accessible label.
-fn button(ui: &mut Ui, sym: &Symbol, min: Vec2, max_face_h: f32, label: &str, hover: &str) -> egui::Response {
+pub(crate) fn button(ui: &mut Ui, sym: &Symbol, min: Vec2, max_face_h: f32, label: &str, hover: &str) -> egui::Response {
     let k = (max_face_h / sym.size.y.max(1.0)).min(1.0);
     let face = sym.size * k;
     let pad = vec2(6.0, 3.0);
@@ -73,7 +73,7 @@ fn button(ui: &mut Ui, sym: &Symbol, min: Vec2, max_face_h: f32, label: &str, ho
 
 impl EquationEditor {
     /// The face of `math` at `pt` points, rendered once per pixel density and cached.
-    fn symbol(&mut self, ui: &Ui, key: &str, math: &Math, pt: f64) -> Option<&Symbol> {
+    pub(crate) fn symbol(&mut self, ui: &Ui, key: &str, math: &Math, pt: f64) -> Option<&Symbol> {
         let ppp = ui.ctx().pixels_per_point();
         let ck = format!("{key}@{ppp}");
         if !self.palette.contains_key(&ck) {

@@ -542,3 +542,49 @@ fn every_palette_face_is_drawn_from_the_bundled_fonts() {
         assert!(!notdef, "palette face {name} has a missing glyph");
     }
 }
+
+/// The galleries a host puts in its ribbon insert into the editor they are called on.
+#[test]
+fn a_gallery_template_inserts_at_the_caret() {
+    let mut h = Harness::builder().with_size(vec2(500.0, 600.0)).build_ui_state(
+        |ui, ed: &mut EquationEditor| {
+            ed.show(ui);
+            ed.gallery_ui(ui, "fraction");
+        },
+        EquationEditor::new().show_palette(false).id_salt("gallery-test"),
+    );
+    h.run();
+    h.get_by_label("Stacked Fraction").click();
+    h.run();
+    assert!(matches!(h.state().math().body.first().map(Node::bare), Some(Node::Frac { .. })), "{:?}", h.state().math());
+}
+
+#[test]
+fn a_gallery_symbol_inserts_at_the_caret() {
+    let mut h = Harness::builder().with_size(vec2(500.0, 600.0)).build_ui_state(
+        |ui, ed: &mut EquationEditor| {
+            ed.show(ui);
+            ed.symbols_ui(ui, 1);
+        },
+        EquationEditor::new().show_palette(false).id_salt("symbol-test"),
+    );
+    h.run();
+    h.get_by_label("π").click();
+    h.run();
+    assert_eq!(h.state().linear(), "π");
+}
+
+#[test]
+fn a_ready_made_equation_replaces_the_equation() {
+    let mut h = Harness::builder().with_size(vec2(500.0, 700.0)).build_ui_state(
+        |ui, ed: &mut EquationEditor| {
+            ed.show(ui);
+            ed.builtins_ui(ui);
+        },
+        EquationEditor::new().show_palette(false).id_salt("builtin-test"),
+    );
+    h.run();
+    h.get_by_label("Euler's identity").click();
+    h.run();
+    assert_eq!(h.state().linear(), "e^(iπ)+1=0");
+}
