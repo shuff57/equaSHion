@@ -82,11 +82,6 @@ pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/n
 frames 8
 check "click Copy LaTeX writes text/plain" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = eq.copyStatus(); if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return eq.copyStatus() || {}; })(); const w = window.__eqSet; return (s.kind === 'latex' && s.state === 'copied' && w.some(([t, d]) => t === 'text/plain' && d === 'x^2+1')) || [s, w]; })()"
 check "setLatex for the MathML click" "eq.setLatex('\\\\frac{1}{2}') === '\\\\frac{1}{2}'"
-check "open the format menu" "eq.showMoreCopy(true) === true"
-frames 4
-read -r CX CY <<<"$(eq_rect mathml)"
-[ "$CX" != "none" ] || fail "no MathML menu item rect"
-pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 4
 read -r CX CY <<<"$(eq_rect mathml)"
 [ "$CX" != "none" ] || fail "no Copy MathML button rect"
@@ -94,24 +89,14 @@ pw --raw eval "() => { window.__eqSet = []; return true; }" >/dev/null
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 8
 check "click Copy MathML writes MathML as text and HTML" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = eq.copyStatus(); if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return eq.copyStatus() || {}; })(); const w = window.__eqSet; const t = w.find(x => x[0] === 'text/plain'), h = w.find(x => x[0] === 'text/html'); return (s.kind === 'mathml' && s.state === 'copied' && t && t[1].startsWith('<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">') && t[1].includes('<mfrac><mn>1</mn><mn>2</mn></mfrac>') && h && h[1].includes('<!--StartFragment-->' + t[1] + '<!--EndFragment-->')) || [s, w.map(x => x[0])]; })()"
-# The second row: OMML, text and SVG are behind More.
-check "OMML hidden until the menu opens" "eq.copyButtonRect('omml') === null || eq.copyButtonRect('omml')"
-check "showMoreCopy(true)" "eq.showMoreCopy(true) === true"
-frames 4
-check "  every format is in the menu" "['latex', 'mathml', 'image', 'omml', 'text', 'svg'].every(k => eq.copyButtonRect(k) !== null) || 'missing'"
-check "  menu items sit beside the Copy button, not over it" "(() => { const m = eq.copyButtonRect('mathml'), o = eq.copyButtonRect('omml'); return o.y > m.y + m.h || o.y + o.h < m.y || [m, o]; })()"
-read -r CX CY <<<"$(eq_rect omml)"
-pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
+# Every format has its own button, all showing at once.
+check "every format has a button" "['latex', 'mathml', 'image', 'omml', 'text', 'svg'].every(k => eq.copyButtonRect(k) !== null) || 'missing'"
 frames 4
 read -r CX CY <<<"$(eq_rect omml)"
 pw --raw eval "() => { window.__eqSet = []; return true; }" >/dev/null
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 8
 check "click Copy OMML writes OMML text" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = eq.copyStatus(); if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return eq.copyStatus() || {}; })(); const w = window.__eqSet; return (s.kind === 'omml' && s.state === 'copied' && w.length === 1 && w[0][0] === 'text/plain' && w[0][1].startsWith('<m:oMath xmlns:m=')) || [s, w]; })()"
-check "open the menu for image" "eq.showMoreCopy(true) === true"
-frames 4
-read -r CX CY <<<"$(eq_rect image)"
-pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
 frames 4
 read -r CX CY <<<"$(eq_rect image)"
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
@@ -160,7 +145,7 @@ shot() {
     pw screenshot --filename "$OUT/$name.png" >/dev/null
     python3 -I "$HERE/check_png.py" "$OUT/$name.png" "$theme" || fail "$name screenshot looks blank or has the wrong theme"
 }
-check "closed disclosures" "eq.setDisclosures(false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
+check "closed disclosures" "eq.setDisclosures(false, false) && eq.showAbout(false)"
 for width in 1280 700; do
     pw resize "$width" 900 >/dev/null
     for theme in light dark; do
@@ -168,34 +153,45 @@ for width in 1280 700; do
     done
 done
 # Everything open, tall window: the whole page down to the About panel.
-check "open disclosures" "eq.setDisclosures(true, true) && eq.setPaletteTab('Functions') && eq.showAbout(true) && eq.showMoreCopy(true)"
+check "open disclosures" "eq.setDisclosures(true, true) && eq.setPaletteTab('Functions') && eq.showAbout(true)"
 for width in 1280 700; do
     pw resize "$width" 2900 >/dev/null
     for theme in light dark; do
         shot "open-$theme-$width" "$theme"
     done
 done
-check "close disclosures" "eq.setPaletteTab('Structures') && eq.setDisclosures(false, false) && eq.showAbout(false) && eq.showMoreCopy(false) === false"
-# The report buttons (report.js): two buttons bottom right, always visible, no menu. The accent
-# one opens the "Report an issue" panel; an empty form is refused in the panel, a filled one is
-# posted to this origin (xtask serve writes it under target/issue-reports) and the panel says so;
-# the new report is then in the list (the small button) and a vote counts once. No sign-in.
+check "close disclosures" "eq.setPaletteTab('Structures') && eq.setDisclosures(false, false) && eq.showAbout(false)"
+# The report buttons (src/fab.rs, egui, so the canvas is all there is: the hooks and real mouse
+# clicks drive them). Two buttons bottom right, always visible, no menu. The accent one opens the
+# "Report an issue" panel; an empty form is refused in the panel, a filled one is posted to this
+# origin (xtask serve writes it under target/issue-reports) and the panel says so; the new report
+# is then in the list (the small button) and a vote counts once. No sign-in.
 pw resize 1280 900 >/dev/null
-check "the report button is bottom right" "(() => { const b = document.querySelector('.fab-main-btn'); if (!b) return 'no button'; const r = b.getBoundingClientRect(); return (r.width === 48 && r.height === 48 && Math.abs(innerWidth - r.right - 24) < 1.5 && Math.abs(innerHeight - r.bottom - 24) < 1.5) || [r.x, r.y, r.width, r.height, innerWidth, innerHeight]; })()"
-check "both buttons are showing and there is no menu" "(() => { const names = [...document.querySelectorAll('.fab-toolbar button')].map(b => b.getAttribute('aria-label')).join(); const vis = [...document.querySelectorAll('.fab-toolbar button')].every(b => { const r = b.getBoundingClientRect(); return r.width > 0 && getComputedStyle(b).opacity === '1'; }); return (names === 'Report a Bug,Reported issues' && vis) || [names, vis]; })()"
-# Buy Me a Coffee (coffee.js): the mug button drives BMC's own chip. BMC's widget loads from its CDN,
-# so the click is only checked to land when the chip exists; with no network it must do nothing.
-check "the coffee button is top right, under the header" "(() => { const b = document.querySelector('[data-tool-id=coffee]'); if (!b) return 'no coffee button'; const r = b.getBoundingClientRect(); return (r.width === 40 && r.top >= 64 && r.top < 100 && Math.abs(innerWidth - r.right - 24) < 1.5) || [r.x, r.y, r.width, r.height]; })()"
-check "the coffee button opens BMC's panel downward when the widget loaded" "(async () => { const b = document.querySelector('[data-tool-id=coffee]'); const chip = await (async () => { for (let i = 0; i < 40; i++) { const c = document.getElementById('bmc-wbtn'); if (c) return c; await new Promise(r => setTimeout(r, 100)); } return null; })(); b.click(); await new Promise(r => setTimeout(r, 600)); if (!chip) return true; const f = document.getElementById('bmc-iframe'); if (!f) return 'no panel'; const r = f.getBoundingClientRect(); return (window.equashionCoffee.clicks() >= 1 && getComputedStyle(chip).opacity === '0' && r.top > b.getBoundingClientRect().bottom && r.bottom <= innerHeight) || [window.equashionCoffee.clicks(), r.top, r.bottom, innerHeight]; })()"
-check "Report a Bug opens the panel with raSHio's layout" "(() => { document.querySelector('.fab-main-btn').click(); const p = document.getElementById('issue-orb-panel'); const kinds = [...p.querySelectorAll('.issue-report-kind-label')].map(x => x.textContent).join(); const labels = [...p.querySelectorAll('label')].map(x => x.textContent).join(); return (p.getAttribute('data-visible') === 'true' && p.querySelector('h4').textContent === 'Report an issue' && kinds === 'Bug,Quirk,Improve' && labels === 'Title,Description' && p.querySelector('.issue-report-submit').textContent === 'Send report') || [kinds, labels]; })()"
-frames 8
+frames 6
+fab_rect() { pw --raw eval "() => { const r = window.equashion.fabRects()['$1']; return r ? Math.round(r.x + r.w / 2) + ' ' + Math.round(r.y + r.h / 2) : 'none'; }" | tr -d '"'; }
+click_at() { pw mousemove "$1" "$2" >/dev/null; frames 2; pw mousedown >/dev/null; pw mouseup >/dev/null; frames 8; }
+check "the report button is bottom right" "(() => { const r = eq.fabRects().main; if (!r) return 'no button'; return (r.w === 48 && r.h === 48 && Math.abs(innerWidth - (r.x + r.w) - 24) < 1.5 && Math.abs(innerHeight - (r.y + r.h) - 24) < 1.5) || r; })()"
+check "both buttons are showing and there is no menu" "(() => { const r = eq.fabRects(); return (r.main && r.list && r.list.w === 40 && r.list.y + r.list.h < r.main.y && r.panel === null && eq.reportState().open === false) || r; })()"
+# Buy Me a Coffee: the mug is egui and clicks BMC's own chip. BMC's widget loads from its CDN, so
+# the click is only checked to land when the chip exists; with no network it must do nothing.
+check "the coffee button is top right, under the header" "(() => { const r = eq.fabRects().mug; if (!r) return 'no coffee button'; return (r.w === 40 && r.y >= 64 && r.y < 100 && Math.abs(innerWidth - (r.x + r.w) - 24) < 1.5) || r; })()"
+check "the coffee button opens BMC's panel downward when the widget loaded" "(async () => { const chip = await (async () => { for (let i = 0; i < 40; i++) { const c = document.getElementById('bmc-wbtn'); if (c) return c; await new Promise(r => setTimeout(r, 100)); } return null; })(); eq.coffeeOpen(); await new Promise(r => setTimeout(r, 800)); if (!chip) return eq.coffeeClicks() === 0 || 'clicked with no chip'; const f = document.getElementById('bmc-iframe'); if (!f) return 'no panel'; const r = f.getBoundingClientRect(), m = eq.fabRects().mug; return (eq.coffeeClicks() >= 1 && getComputedStyle(chip).opacity === '0' && r.top > m.y + m.h && r.bottom <= innerHeight) || [eq.coffeeClicks(), r.top, r.bottom, innerHeight]; })()"
+# BMC puts a click-catching overlay under its panel: the first click outside only closes the panel.
+BMC_OPEN="$(pw --raw eval "() => { const f = document.getElementById('bmc-iframe'); return !!f && f.getBoundingClientRect().height > 0; }")"
+if [ "$BMC_OPEN" = "true" ]; then click_at 640 32; fi
+read -r CX CY <<<"$(fab_rect main)"
+[ "$CX" != "none" ] || fail "no report button rect"
+click_at "$CX" "$CY"
+check "Report a Bug opens the panel on the form" "(() => { const s = eq.reportState(), r = eq.fabRects().panel; return (s.open && s.view === 'form' && s.kind === 'bug' && r && r.x + r.w <= innerWidth - 20 && r.y + r.h <= eq.fabRects().list.y) || [s, r]; })()"
 pw screenshot --filename "$OUT/report.png" >/dev/null
-check "an empty report is refused in the panel" "(async () => { const p = document.getElementById('issue-orb-panel'); p.querySelector('.issue-report-submit').click(); await new Promise(r => setTimeout(r, 100)); const e = p.querySelector('.issue-report-error'); return (!e.hidden && e.textContent === 'Add a short title.') || e.textContent; })()"
-check "a report is sent from the panel" "(async () => { const p = document.getElementById('issue-orb-panel'); p.querySelector('[data-kind=enhancement]').click(); const t = p.querySelector('.issue-report-title'), d = p.querySelector('.issue-report-description'); t.value = 'Smoke test report'; d.value = 'Sent by tests/browser/smoke.sh.'; p.querySelector('.issue-report-submit').click(); for (let i = 0; i < 50; i++) { const th = p.querySelector('.issue-report-thanks'); if (!th.hidden) return th.textContent.startsWith('Thank you') || th.textContent; await new Promise(r => setTimeout(r, 100)); } return p.querySelector('.issue-report-error').textContent || 'no answer'; })()"
+check "an empty report is refused in the panel" "(async () => { eq.reportSubmit(); await new Promise(r => setTimeout(r, 150)); const s = eq.reportState(); return (s.error === 'Add a short title.' && !s.busy) || s; })()"
+check "a report is sent from the panel" "(async () => { if (!eq.reportFill('enhancement', 'Smoke test report', 'Sent by tests/browser/smoke.sh.')) return 'fill refused'; eq.reportSubmit(); for (let i = 0; i < 50; i++) { const s = eq.reportState(); if (s.thanks) return true; if (s.error) return s.error; await new Promise(r => setTimeout(r, 100)); } return 'no answer'; })()"
 frames 4
-check "the report is in the list and a vote counts once" "(async () => { await new Promise(r => setTimeout(r, 2600)); document.querySelector('[data-tool-id=issue-list]').click(); const p = document.getElementById('issue-orb-panel'); const items = () => [...p.querySelectorAll('.issue-item')].filter(i => i.querySelector('.issue-item-title').textContent === 'Smoke test report').sort((a, b) => Number(b.dataset.issueId) - Number(a.dataset.issueId)); for (let i = 0; i < 50 && !items().length; i++) await new Promise(r => setTimeout(r, 100)); if (!items().length) return 'not listed'; const count = () => Number(items()[0].querySelector('.issue-vote-count').textContent); const before = count(); const btn = items()[0].querySelector('.issue-vote'); btn.click(); for (let i = 0; i < 50 && btn.getAttribute('aria-pressed') !== 'true'; i++) await new Promise(r => setTimeout(r, 100)); btn.click(); await new Promise(r => setTimeout(r, 300)); return (count() === before + 1 && btn.disabled) || [before, count()]; })()"
+check "the report is in the list and a vote counts once" "(async () => { await new Promise(r => setTimeout(r, 2600)); eq.reportShow('list'); const mine = () => eq.reportState().items.filter(i => i.title === 'Smoke test report').sort((a, b) => Number(b.id) - Number(a.id)); for (let i = 0; i < 50 && !mine().length; i++) await new Promise(r => setTimeout(r, 100)); if (!mine().length) return ['not listed', eq.reportState()]; const id = mine()[0].id, before = mine()[0].votes; eq.reportVote(id); for (let i = 0; i < 50 && !mine().find(x => x.id === id).voted; i++) await new Promise(r => setTimeout(r, 100)); eq.reportVote(id); await new Promise(r => setTimeout(r, 300)); const now = mine().find(x => x.id === id); return (now.votes === before + 1 && now.voted) || [before, now]; })()"
 frames 4
-check "Escape closes the panel" "(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); return document.getElementById('issue-orb-panel').getAttribute('data-visible') === 'false' || 'still open'; })()"
+pw press Escape >/dev/null
+frames 6
+check "Escape closes the panel" "eq.reportState().open === false && eq.fabRects().panel === null || eq.reportState()"
 pw resize 1280 900 >/dev/null
 check "setTheme(system)" "eq.setTheme('system') && eq.themePreference() === 'system' || eq.themePreference()"
 check "still on the editor with an equation" "eq.activeTab() === 'editor' && eq.latex().length > 0"

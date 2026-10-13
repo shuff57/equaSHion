@@ -21,6 +21,7 @@ equashion-egui = { workspace = true }
 png = "0.18"
 egui = { workspace = true }
 log = { workspace = true }
+serde_json = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # glow = WebGL2 only (no wgpu, no WebGPU): works in headless Chromium and keeps the wasm small.
@@ -29,7 +30,11 @@ eframe = { workspace = true, features = ["default_fonts", "glow"] }
 wasm-bindgen = "=0.2.128"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "HtmlCanvasElement", "Location", "MediaQueryList"] }
+web-sys = { version = "0.3", features = [
+    "Window", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlInputElement", "CssStyleDeclaration", "Location", "MediaQueryList",
+    "Navigator", "Storage", "Event", "EventTarget", "ClipboardEvent", "DataTransfer", "DataTransferItem", "DataTransferItemList",
+    "HtmlDocument", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "Url", "File", "FileList", "FileReader", "Headers", "Request", "RequestInit", "Response",
+] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 egui_kittest = { workspace = true }

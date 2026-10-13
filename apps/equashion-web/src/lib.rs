@@ -7,6 +7,8 @@
 
 pub mod corpus;
 pub mod export;
+pub mod fab;
+pub mod logo;
 pub mod palette;
 pub mod selftest;
 mod showcase;

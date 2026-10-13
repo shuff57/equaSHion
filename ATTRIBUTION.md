@@ -33,5 +33,5 @@ original to this repository.
 
 The page loads Buy Me a Coffee's hosted widget (`https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js`)
 for the mug button. It is a third-party script and the only third-party request the page makes;
-it is loaded from `apps/equashion-web/index.html`. `apps/equashion-web/coffee.js` and the mug
-icon paths are the author's own, ported from the inishial repository (`public/bmc.js`).
+it is loaded from `apps/equashion-web/index.html`. The egui mug button (`apps/equashion-web/src/fab.rs`)
+and its icon shapes are the author's own, ported from the inishial repository (`public/bmc.js`).

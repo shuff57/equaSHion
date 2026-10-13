@@ -23,7 +23,7 @@ and [DIVERGENCE.md](DIVERGENCE.md) for behaviour that now differs from WordCraft
 | `equashion-layout` | `crates/layout` | math, font, kurbo | `layout_equation` -> `EqLayout` (a `Scene` plus caret rectangles and hit testing), `layout_math_wrapped`, `LayoutCache`, the `MathFonts` trait |
 | `equashion-render` | `crates/render` | layout, vello_cpu | `render_scene` / `render_eq` to premultiplied RGBA, `scene_to_svg` |
 | `equashion-egui` | `crates/egui` | math, layout, render, egui | `EquationEditor`: the equation editor as an egui widget (palette, canvas with caret, linear field), no host types |
-| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web page: the editor with a symbol palette, Copy as LaTeX / MathML / image (and OMML / text / SVG behind More), paste-in, examples, light and dark themes, `window.equashion` test hooks |
+| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web page: the editor with a symbol palette, a Copy button per format (LaTeX, MathML, image, OMML, text, SVG), paste-in, examples, light and dark themes, `window.equashion` test hooks |
 | `xtask` | `xtask` | std | `cargo xtask check`, `bless`, `web`, `serve`, `smoke` |
 
 ```rust
@@ -100,11 +100,11 @@ One centred column, top to bottom:
   Relations, Math operations, Arrows, Functions, ordered like Google Docs' equation toolbar), each tab split into labelled groups, then the `EquationEditor`
 canvas. Every palette face is rendered by equashion-render, not by egui's fonts. A long
   equation shrinks to half size and then scrolls sideways to keep the caret in view.
-- **Copy button** under the canvas: one full-width button with its format drop-down built in.
-  The drop-down lists Copy LaTeX, Copy MathML (for ONLYOFFICE, LibreOffice Math and Word), Copy
-  image, Copy OMML (Word equation XML), Copy text and Download SVG; picking one makes it the
-  button's format. One line under it says where each format pastes. Then the current LaTeX in a read-only line you can
-  select.
+- **Copy buttons** under the canvas: one per format, each with a copy icon (a download arrow for
+  the SVG file). Copy LaTeX, Copy MathML (for ONLYOFFICE, LibreOffice Math and Word), Copy image,
+  Copy OMML (Word equation XML), Copy text and Download SVG. They sit six across, or three by two on
+  a narrow screen; the pressed one reads Copied for two seconds. One line under them says where each
+  format pastes. Then the current LaTeX in a read-only line you can select.
 - **Paste LaTeX, MathML or OMML** (a disclosure): a field and a Load button that replaces the equation.
 - **Try it**: ten examples from `corpus/equations.tsv`, and **How to type**, a short cheat sheet
   (each line is checked against the editor in `apps/equashion-web/tests/showcase.rs`).
@@ -121,7 +121,7 @@ canvas. Every palette face is rendered by equashion-render, not by egui's fonts.
   opens Buy Me a Coffee's hosted panel (`data-id="shuff57"`) hanging down from the button, and a
   one-line invitation shows once per session for ten seconds. This is the only third-party
   request the page makes (`cdnjs.buymeacoffee.com`, loaded from `index.html`); with the network
-  off the button does nothing. `apps/equashion-web/coffee.js` holds the behaviour. To use
+  off the button does nothing. `apps/equashion-web/src/fab.rs` holds the behaviour. To use
   another handle, change `data-id` in `index.html`.
 
 ### What each Copy button puts on the clipboard
@@ -235,8 +235,7 @@ page exposes test hooks on `window.equashion` (the full table is at the top of
 `apps/equashion-web/src/web.rs`): `linear()`, `omml()`, `latex()`, `setLinear(s)`,
 `setLatex(s)`, `paste(s)`, `copy(kind)` (`latex`, `mathml`, `image`, `omml`, `text`, `svg`;
 `word` is an alias of `mathml`; a Promise of `{kind, status, items}` with each MIME type's data),
-`copyStatus()`, `copyButtonRect(kind)` (`null` for a button behind More while it is closed),
-`showMoreCopy(on)`,
+`copyStatus()`, `copyButtonRect(kind)`,
 `examples()`, `loadExample(idOrName)`, `selftest()`, `galleryCount()`, `activeTab()` (always
 `editor`), `setTab(name)` (accepted and ignored), `showAbout(on)`,
 `setDisclosures(more, paste, howto)`, `unknownCommands()`, `theme()`, `themePreference()`,
@@ -246,7 +245,7 @@ The smoke test uses its own playwright-cli session (`equashion`). It checks the 
 Copy payload (MathML that starts with the exact header, parses with the browser's XML parser with
 the MathML namespace on the root and has no named entities, the same `<math>` in the HTML
 fragment; OMML with `m:f` for a fraction; PNG magic bytes; an `<svg` document), clicks Copy LaTeX,
-Copy MathML and Copy OMML (picked from the drop-down) for real and records what the page hands the clipboard,
+Copy MathML and Copy OMML for real and records what the page hands the clipboard,
 dispatches real paste events with MathML, OMML, LaTeX and linear text, pastes the output of
 `copy('mathml')` back in, loads every example, and saves screenshots
 in both themes at 1280 and 700 px wide (closed, and with every disclosure and About open) to

@@ -11,6 +11,8 @@ use equashion_math::to_latex;
 
 use crate::corpus::{self, Row};
 use crate::export::{self, CopyKind, ImportError, Payload};
+use crate::fab::Fab;
+use crate::logo::Logo;
 use crate::palette::{self, Item, Palette as SymbolPalette};
 use crate::selftest::{self, Report};
 use crate::theme::{self, Palette, R_CONTROL, R_PANEL, S4, S8, S12, S16, S24, S32, T_BODY, T_CAPTION, T_H2, T_MONO, ThemePref};
@@ -111,10 +113,10 @@ pub struct Showcase {
     symbols: SymbolPalette,
     report: Option<Report>,
     theme: ThemePref,
-    /// The host draws the animated wordmark over the header (`logo.js`): the header reserves a
-    /// slot for it instead of painting the name, and `logo_rect` is where the slot landed.
-    logo_slot: bool,
-    logo_rect: Option<egui::Rect>,
+    /// The animated wordmark in the header.
+    logo: Logo,
+    /// Report a Bug, the list of reports and the Buy Me a Coffee mug.
+    fab: Fab,
     reduced_motion: bool,
     /// Fonts and styles must be (re)installed on the context.
     style_dirty: bool,
@@ -129,10 +131,6 @@ pub struct Showcase {
     import_error: Option<&'static str>,
     howto_open: bool,
     about_open: bool,
-    /// The second Copy row (OMML, text, SVG) is shown.
-    more_copy: bool,
-    /// The format the big Copy button writes.
-    copy_kind: CopyKind,
     /// Where each Copy button was drawn last frame (for the browser test's real clicks).
     copy_rects: Vec<(CopyKind, egui::Rect)>,
 }
@@ -158,8 +156,8 @@ impl Showcase {
             symbols: SymbolPalette::default(),
             report: None,
             theme: ThemePref::System,
-            logo_slot: false,
-            logo_rect: None,
+            logo: Logo::new(),
+            fab: Fab::new(),
             reduced_motion: false,
             style_dirty: true,
             fonts_ready: false,
@@ -171,8 +169,6 @@ impl Showcase {
             import_error: None,
             howto_open: false,
             about_open: false,
-            more_copy: false,
-            copy_kind: CopyKind::Latex,
             copy_rects: Vec::new(),
         }
     }
@@ -194,14 +190,19 @@ impl Showcase {
         }
     }
 
-    /// Reserve a header slot for the host's animated wordmark instead of painting the name.
-    pub fn reserve_logo_slot(&mut self) {
-        self.logo_slot = true;
+    /// The report buttons, their panel and the coffee mug (state, and the requests the browser
+    /// shell carries out).
+    pub fn fab(&self) -> &Fab {
+        &self.fab
     }
 
-    /// Where the header's wordmark slot was laid out this frame, in points, when reserved.
-    pub fn logo_rect(&self) -> Option<egui::Rect> {
-        self.logo_rect
+    pub fn fab_mut(&mut self) -> &mut Fab {
+        &mut self.fab
+    }
+
+    /// Play the header's wordmark animation again.
+    pub fn replay_logo(&mut self) {
+        self.logo.replay();
     }
 
     /// The theme in effect on `ctx` once the preference is applied.
@@ -390,26 +391,6 @@ impl Showcase {
         self.howto_open = howto;
     }
 
-    /// The format drop-down next to the Copy button is open.
-    pub fn more_copy(&self) -> bool {
-        self.more_copy
-    }
-
-    /// Open or close the format drop-down.
-    pub fn set_more_copy(&mut self, on: bool) {
-        self.more_copy = on;
-    }
-
-    /// The format the big Copy button writes.
-    pub fn copy_kind(&self) -> CopyKind {
-        self.copy_kind
-    }
-
-    /// Pick the format the big Copy button writes.
-    pub fn set_copy_kind(&mut self, kind: CopyKind) {
-        self.copy_kind = kind;
-    }
-
     /// Install the fonts and the theme on `ctx` now. [`Showcase::ui`] does it on its first
     /// frame otherwise (and then skips drawing that frame, because new fonts only apply from
     /// the next one).
@@ -432,6 +413,11 @@ impl Showcase {
             ui.ctx().request_repaint();
         }
         let p = *theme::palette(ui);
+        // The floating buttons and panels go first, so Escape and a click outside the panel reach
+        // it before the page's own widgets.
+        let now = ui.input(|i| i.time);
+        let editor = &self.editor;
+        self.fab.ui(ui.ctx(), &p, now, &|| to_latex(editor.math()));
         egui::Panel::top("equashion-header").exact_size(64.0).frame(Frame::new().fill(p.surface).stroke(Stroke::NONE)).show(ui, |ui| {
             let r = ui.max_rect();
             ui.painter().hline(r.x_range(), r.max.y - 0.5, Stroke::new(1.0, p.border));
@@ -449,9 +435,8 @@ impl Showcase {
         ui.allocate_ui_with_layout(vec2(w, 64.0), Layout::left_to_right(Align::Center), |ui| {
             // A phone-width header also holds the GitHub link and the theme toggle.
             let wordmark = if w < 420.0 { T_DISPLAY_WORDMARK - 4.0 } else { T_DISPLAY_WORDMARK };
-            if self.logo_slot {
-                let (rect, _) = ui.allocate_exact_size(vec2(LOGO_SLOT_W, LOGO_SLOT_H), Sense::hover());
-                self.logo_rect = Some(rect);
+            if self.logo.available() {
+                self.logo.ui(ui, p, self.reduced_motion);
             } else {
                 ui.label(RichText::new("equaSHion").font(theme::semibold(wordmark)).color(p.strong));
             }
@@ -601,75 +586,42 @@ impl Showcase {
     fn copy_row(&mut self, ui: &mut Ui, p: &Palette) {
         let now = ui.input(|i| i.time);
         let mut pressed = None;
-        let mut chosen = None;
-        let mut toggle_menu = false;
         self.copy_rects.clear();
-        let kind = self.copy_kind;
-        // One big button with its format drop-down attached, then the inline confirmation.
-        // The inline confirmation, for two seconds, replaces the label on the button.
-        let mut label = kind.title();
+        // The inline confirmation replaces the label on the pressed button for two seconds.
+        let mut confirmed: Option<(CopyKind, &'static str)> = None;
         if let Some(s) = self.status.as_mut()
             && let Some(o) = s.outcome
             && o != Outcome::Blocked
         {
             let at = *s.shown_at.get_or_insert(now);
             if now - at < CONFIRM_SECS {
-                label = if o == Outcome::Downloaded { "Downloaded" } else { "Copied" };
+                confirmed = Some((s.kind, if o == Outcome::Downloaded { "Downloaded" } else { "Copied" }));
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
             } else {
                 self.status = None;
             }
         }
-        // One full-width button with its format drop-down built in.
-        let (main, chevron) = split_button(ui, p, label, self.more_copy);
-        let main = main.on_hover_text(kind.hint());
-        let chevron = chevron.on_hover_text("Choose the format to copy");
-        let row_left = main.rect.left();
-        self.copy_rects.push((kind, main.rect));
-        if main.clicked() {
-            pressed = Some(kind);
+        // One button per format, six across when they fit and three by two when they do not.
+        let gap = S8;
+        let avail = ui.available_width();
+        let cols = if (avail - 5.0 * gap) / 6.0 >= COPY_BTN_MIN_W { 6 } else { 3 };
+        let w = ((avail - (cols as f32 - 1.0) * gap) / cols as f32).floor();
+        for chunk in CopyKind::ALL.chunks(cols) {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = gap;
+                for &kind in chunk {
+                    let done = confirmed.filter(|(k, _)| *k == kind).map(|(_, t)| t);
+                    let r = copy_button(ui, p, kind, w, done).on_hover_text(kind.hint());
+                    self.copy_rects.push((kind, r.rect));
+                    if r.clicked() {
+                        pressed = Some(kind);
+                    }
+                }
+            });
+            ui.add_space(S4);
         }
-        if chevron.clicked() {
-            toggle_menu = true;
-        }
-        if self.more_copy {
-            // Below the button; above it when the six rows would run off the bottom of the window.
-            let below = ui.ctx().content_rect().max.y - chevron.rect.bottom() >= MENU_H;
-            let (anchor, pivot) = if below {
-                (pos2(row_left, chevron.rect.bottom() + S4), egui::Align2::LEFT_TOP)
-            } else {
-                (pos2(row_left, chevron.rect.top() - S4), egui::Align2::LEFT_BOTTOM)
-            };
-            let area = egui::Area::new(egui::Id::new("equashion-copy-menu")).order(egui::Order::Foreground).pivot(pivot).fixed_pos(anchor).show(
-                ui.ctx(),
-                |ui| {
-                    Frame::popup(ui.style()).show(ui, |ui| {
-                        ui.set_min_width((chevron.rect.right() - row_left - 2.0 * S8).max(230.0));
-                        ui.spacing_mut().item_spacing = vec2(S4, S4);
-                        for k in CopyKind::ALL {
-                            let r = menu_row(ui, p, k.title(), k == kind).on_hover_text(k.hint());
-                            self.copy_rects.push((k, r.rect));
-                            if r.clicked() {
-                                chosen = Some(k);
-                            }
-                        }
-                    })
-                },
-            );
-            let outside = ui.input(|i| i.pointer.any_click()) && !toggle_menu && !area.response.contains_pointer() && !chevron.contains_pointer();
-            if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.more_copy = false;
-            }
-        }
-        ui.add_space(S8);
+        ui.add_space(S4);
         ui.add(egui::Label::new(RichText::new(COPY_GUIDE).size(T_BODY).color(p.muted)).wrap());
-        if toggle_menu {
-            self.more_copy = !self.more_copy;
-        }
-        if let Some(k) = chosen {
-            self.copy_kind = k;
-            self.more_copy = false;
-        }
         if let Some(kind) = pressed {
             self.request_copy(kind);
             self.focus_editor(ui);
@@ -818,10 +770,6 @@ impl Showcase {
 
 /// The wordmark size.
 const T_DISPLAY_WORDMARK: f32 = 20.0;
-/// The header's wordmark slot, the settled word of `assets/logo/equashion-motion.svg` at
-/// `LOGO_SCALE` (the word is 454 art units wide and 140 tall).
-const LOGO_SLOT_W: f32 = 120.0;
-const LOGO_SLOT_H: f32 = 40.0;
 
 /// Draw `add` in the page column: at most [`COLUMN_MAX`] wide, centred, with side gutters.
 fn centred<R>(ui: &mut Ui, add: impl FnOnce(&mut Ui) -> R) -> R {
@@ -870,81 +818,75 @@ fn main_button(ui: &mut Ui, p: &Palette, text: &str, primary: bool) -> egui::Res
     .inner
 }
 
-/// Room the format menu needs below its button, points (six rows, gaps and frame).
-const MENU_H: f32 = 6.0 * (BUTTON_H + S4) + 2.0 * S8;
+/// The narrowest a Copy button may be before the row wraps to three by two.
+const COPY_BTN_MIN_W: f32 = 104.0;
 
-/// The Copy button and its drop-down as one accent pill: the label on the left, a divider and
-/// an arrow on the right. Returns the label's response and the arrow's.
-fn split_button(ui: &mut Ui, p: &Palette, label: &str, open: bool) -> (egui::Response, egui::Response) {
-    let h = BUTTON_H + 4.0;
-    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::hover());
-    let arrow_w = BUTTON_H + 8.0;
-    let main_rect = egui::Rect::from_min_max(rect.min, pos2(rect.max.x - arrow_w, rect.max.y));
-    let arrow_rect = egui::Rect::from_min_max(pos2(rect.max.x - arrow_w, rect.min.y), rect.max);
-    let id = ui.id().with("equashion-copy-split");
-    let main = ui.interact(main_rect, id.with("main"), Sense::click());
-    let arrow = ui.interact(arrow_rect, id.with("arrow"), Sense::click());
-    main.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
-    arrow.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Choose format"));
+/// One Copy button: a copy icon (a download arrow for the SVG file) and the format name, on a
+/// bordered surface that takes the accent when hovered. `done` replaces the label briefly.
+fn copy_button(ui: &mut Ui, p: &Palette, kind: CopyKind, width: f32, done: Option<&str>) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, BUTTON_H + 4.0), Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, done.unwrap_or(kind.title())));
     if ui.is_rect_visible(rect) {
-        let fill = |r: &egui::Response| {
-            if r.is_pointer_button_down_on() {
-                p.accent_pressed
-            } else if r.hovered() || r.has_focus() {
-                p.accent_hover
-            } else {
-                p.accent
-            }
-        };
-        let r = R_CONTROL;
-        let painter = ui.painter();
-        painter.rect_filled(main_rect, egui::CornerRadius { nw: r, sw: r, ne: 0, se: 0 }, fill(&main));
-        painter.rect_filled(arrow_rect, egui::CornerRadius { nw: 0, sw: 0, ne: r, se: r }, fill(&arrow));
-        // A hairline between the two halves.
-        let x = arrow_rect.min.x;
-        painter.line_segment([pos2(x, rect.min.y + 8.0), pos2(x, rect.max.y - 8.0)], Stroke::new(1.0, p.on_accent.gamma_multiply(0.45)));
-        let galley = painter.layout_no_wrap(label.to_string(), FontId::proportional(T_BODY + 1.0), p.on_accent);
-        let pos = main_rect.center() - galley.size() / 2.0;
-        painter.galley(pos2(pos.x.round(), pos.y.round()), galley, p.on_accent);
-        let c = arrow_rect.center();
-        let (w, hh) = (6.0, 3.5);
-        let pts = if open {
-            vec![pos2(c.x - w, c.y + hh), pos2(c.x + w, c.y + hh), pos2(c.x, c.y - hh)]
-        } else {
-            vec![pos2(c.x - w, c.y - hh), pos2(c.x + w, c.y - hh), pos2(c.x, c.y + hh)]
-        };
-        painter.add(egui::Shape::convex_polygon(pts, p.on_accent, Stroke::NONE));
-        for resp in [&main, &arrow] {
-            if resp.has_focus() {
-                painter.rect_stroke(resp.rect, R_CONTROL, Stroke::new(2.0, p.strong), StrokeKind::Inside);
-            }
-        }
-    }
-    (main, arrow)
-}
-
-/// One row of the format menu: no border, a tinted background under the pointer, and the
-/// picked format in the accent colour.
-fn menu_row(ui: &mut Ui, p: &Palette, text: &str, selected: bool) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), BUTTON_H), Sense::click());
-    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, true, selected, text));
-    if ui.is_rect_visible(rect) {
-        let (fill, fg) = if resp.is_pointer_button_down_on() {
-            (p.control_active, p.strong)
+        let (fill, border, fg) = if resp.is_pointer_button_down_on() {
+            (p.accent_pressed, p.accent_pressed, p.on_accent)
         } else if resp.hovered() || resp.has_focus() {
-            (p.control_hover, p.strong)
-        } else if selected {
-            (Color32::TRANSPARENT, p.accent_text)
+            (p.accent_hover, p.accent_hover, p.on_accent)
+        } else if done.is_some() {
+            (p.accent_soft, p.accent, p.accent_text)
         } else {
-            (Color32::TRANSPARENT, p.text)
+            (p.surface, p.border, p.text)
         };
         let painter = ui.painter();
         painter.rect_filled(rect, R_CONTROL, fill);
-        let galley = painter.layout_no_wrap(text.to_string(), FontId::proportional(T_BODY), fg);
-        let y = rect.center().y - galley.size().y / 2.0;
-        painter.galley(pos2((rect.min.x + S12).round(), y.round()), galley, fg);
+        painter.rect_stroke(rect, R_CONTROL, Stroke::new(1.0, border), StrokeKind::Inside);
+        let label = done.unwrap_or(kind.short());
+        let galley = painter.layout_no_wrap(label.to_string(), FontId::proportional(T_BODY + 1.0), fg);
+        let icon = 16.0;
+        let total = icon + S8 + galley.size().x;
+        let left = rect.center().x - total / 2.0;
+        let c = pos2((left + icon / 2.0).round(), rect.center().y.round());
+        if done.is_some() {
+            paint_check(painter, c, icon, fg);
+        } else if kind.is_download() {
+            paint_download(painter, c, icon, fg);
+        } else {
+            paint_copy(painter, c, icon, fg);
+        }
+        painter.galley(pos2((left + icon + S8).round(), (rect.center().y - galley.size().y / 2.0).round()), galley, fg);
+        if resp.has_focus() {
+            painter.rect_stroke(rect, R_CONTROL, Stroke::new(2.0, p.strong), StrokeKind::Inside);
+        }
     }
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// Two overlapping sheets, the usual copy icon.
+fn paint_copy(painter: &egui::Painter, c: egui::Pos2, size: f32, color: Color32) {
+    let st = Stroke::new(1.5, color);
+    let s = size * 0.62;
+    let back = egui::Rect::from_min_size(pos2(c.x - size / 2.0 + 0.5, c.y - size / 2.0 + 0.5), vec2(s, s));
+    let front = back.translate(vec2(size - s - 1.0, size - s - 1.0));
+    // The back sheet shows only its top and left edges, as in the usual icon.
+    painter.line_segment([back.left_bottom() - vec2(0.0, 1.0), back.left_top()], st);
+    painter.line_segment([back.left_top(), back.right_top()], st);
+    painter.rect_stroke(front, 2.0, st, StrokeKind::Inside);
+}
+
+/// An arrow into a tray, for a file download.
+fn paint_download(painter: &egui::Painter, c: egui::Pos2, size: f32, color: Color32) {
+    let st = Stroke::new(1.6, color);
+    let h = size / 2.0;
+    painter.line_segment([pos2(c.x, c.y - h + 1.0), pos2(c.x, c.y + h * 0.25)], st);
+    painter.line_segment([pos2(c.x - h * 0.5, c.y - h * 0.25), pos2(c.x, c.y + h * 0.25)], st);
+    painter.line_segment([pos2(c.x + h * 0.5, c.y - h * 0.25), pos2(c.x, c.y + h * 0.25)], st);
+    painter.line_segment([pos2(c.x - h * 0.7, c.y + h - 1.0), pos2(c.x + h * 0.7, c.y + h - 1.0)], st);
+}
+
+fn paint_check(painter: &egui::Painter, c: egui::Pos2, size: f32, color: Color32) {
+    let st = Stroke::new(2.0, color);
+    let h = size / 2.0;
+    painter.line_segment([pos2(c.x - h * 0.6, c.y), pos2(c.x - h * 0.15, c.y + h * 0.5)], st);
+    painter.line_segment([pos2(c.x - h * 0.15, c.y + h * 0.5), pos2(c.x + h * 0.65, c.y - h * 0.5)], st);
 }
 
 /// A theme segment: text on a tinted background when selected, a hover fill, and the accent

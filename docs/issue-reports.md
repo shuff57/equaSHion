@@ -6,7 +6,8 @@ report, see what has been reported and vote.
 ## What the page does
 
 Two buttons sit bottom right, always showing, laid out and styled like raSHio's report button and
-panel (`apps/equashion-web/report.js`; its colours follow the page's light and dark theme).
+panel. They are drawn with egui (`apps/equashion-web/src/fab.rs`, its colours are the page's light
+and dark theme); `src/web.rs` does the `fetch`, `localStorage` and file picker.
 
 - **Report a Bug** (the accent button): opens the "Report an issue" panel. Kind (Bug, Quirk,
   Improve), a title (100 characters), a description (2000) and an optional screenshot (a file or
@@ -17,8 +18,8 @@ panel (`apps/equashion-web/report.js`; its colours follow the page's light and d
 - **Vote**: one per visitor per issue. The page remembers your votes in this browser
   (`localStorage`), the server counts one per sender.
 
-Escape or a click anywhere else closes the panel. The page's keyboard and clipboard handling (the
-equation editor) does not see what is typed in the panel.
+Escape or a click anywhere else closes the panel. The equation editor does not see what is typed in
+the panel. The attached screenshot is listed by name, with a Remove button; it has no thumbnail.
 
 ## API
 
@@ -69,7 +70,10 @@ choosing whether it is public.
 - `tests/functions/issue-reports.test.mjs` (`bun test tests/functions/`): the functions against a
   fake D1 and a fake GitHub (status mapping, labels, validation, the rate limit, one vote each,
   what the list hides).
-- `tests/browser/smoke.sh`: drives the real buttons and panel in headless Chromium: the layout
-  (bottom right, both buttons showing, no menu), an empty report refused, a real report posted
-  through `xtask serve`, found in the list and voted for once, Escape. The file picker and image
-  paste need a real user gesture and are not driven headless.
+- `apps/equashion-web/src/fab.rs` unit tests: the list and error parsing, the empty report refused,
+  the request body, one vote each, the screenshot size limit.
+- `tests/browser/smoke.sh`: drives the real buttons and panel in headless Chromium through the
+  `window.equashion` report hooks and real mouse clicks (the canvas has no DOM): the layout (bottom
+  right, both buttons showing, no menu), an empty report refused, a real report posted through
+  `xtask serve`, found in the list and voted for once, Escape. The file picker and image paste need
+  a real user gesture and are not driven headless.

@@ -9,11 +9,15 @@ use equashion_web::export::Data;
 use equashion_web::{COPY_GUIDE, CREDIT, CopyKind, EXAMPLES, HOW_TO_TYPE, Outcome, PASTE_LABEL, Showcase, ThemePref, corpus};
 
 fn harness_at(w: f32) -> Harness<'static, Showcase> {
+    // The header wordmark plays for 4.4 s and asks for a frame every 16 ms while it does, which
+    // `Harness::run` would wait out: the tests see the settled mark, as a reduced-motion visitor does.
+    let mut app = Showcase::new();
+    app.set_reduced_motion(true);
     let mut h = Harness::builder().with_size(vec2(w, 1400.0)).build_ui_state(
         |ui, s: &mut Showcase| {
             s.ui(ui);
         },
-        Showcase::new(),
+        app,
     );
     h.run();
     h
@@ -49,20 +53,12 @@ fn copy_buttons_queue_their_payloads() {
     let mut h = harness();
     h.state_mut().set_latex(r"\frac{a}{b}");
     h.run();
-    // One big button; every format is behind its drop-down.
-    h.get_by_label(CopyKind::Latex.title());
-    for kind in CopyKind::MORE {
-        assert!(h.query_by_label(kind.title()).is_none(), "{kind:?} is shown before the drop-down opens");
+    // One button per format, all showing, none behind a menu.
+    for kind in CopyKind::ALL {
+        h.get_by_label(kind.title());
     }
     for kind in CopyKind::ALL {
-        h.get_by_label("Choose format").click();
-        h.run();
-        assert!(h.state().more_copy());
-        h.get_all_by_label(kind.title()).last().expect("menu item").click();
-        h.run();
-        assert!(!h.state().more_copy(), "{kind:?}: picking closes the menu");
-        assert_eq!(h.state().copy_kind(), kind);
-        assert!(h.state_mut().take_requests().is_empty(), "{kind:?}: picking does not copy");
+        h.state_mut().take_requests();
         h.get_by_label(kind.title()).click();
         h.run();
         let reqs = h.state_mut().take_requests();
@@ -333,22 +329,15 @@ fn every_how_to_type_line_does_what_it_says() {
 }
 
 #[test]
-fn the_copy_button_and_its_drop_down_stay_on_one_line_at_1280_and_700_px() {
+fn the_six_copy_buttons_are_all_showing_in_even_rows_at_1280_and_700_px() {
     for w in [1280.0, 700.0] {
-        let mut h = harness_at(w);
-        let main = h.get_by_label(CopyKind::Latex.title()).rect();
-        let arrow = h.get_by_label("Choose format").rect();
-        assert!(main.height() >= 36.0 && main.width() > arrow.width(), "{w}: {main:?} {arrow:?}");
-        assert!((main.min.y - arrow.min.y).abs() < 0.5 && main.max.x <= arrow.min.x + 0.5, "{w}: {main:?} {arrow:?}");
-        h.state_mut().set_more_copy(true);
-        h.run();
-        let items: Vec<egui::Rect> = CopyKind::ALL.iter().skip(1).map(|k| h.get_by_label(k.title()).rect()).collect();
-        let main = h.get_all_by_label(CopyKind::Latex.title()).next().expect("main button").rect();
-        // Below the button, or above it when there is no room: never over it.
-        let below = items.iter().all(|r| r.min.y > main.max.y);
-        let above = items.iter().all(|r| r.max.y < main.min.y);
-        assert!(below || above, "{w}: the menu covers the button: {main:?} {items:?}");
-        assert!(items.windows(2).all(|p| p[0].max.y <= p[1].min.y + 0.5), "{w}: items stack top to bottom: {items:?}");
+        let h = harness_at(w);
+        let rects: Vec<egui::Rect> = CopyKind::ALL.iter().map(|k| h.get_by_label(k.title()).rect()).collect();
+        assert!(rects.iter().all(|r| r.height() >= 36.0 && r.width() >= 100.0), "{w}: {rects:?}");
+        // Buttons in one row share a top edge; rows are 3 or 6 wide.
+        let first_row = rects.iter().filter(|r| (r.min.y - rects[0].min.y).abs() < 0.5).count();
+        assert!(first_row == 6 || first_row == 3, "{w}: {first_row} in the first row: {rects:?}");
+        assert!(rects.windows(2).all(|p| p[0].max.x <= p[1].min.x + 0.5 || p[1].min.y > p[0].max.y - 0.5), "{w}: {rects:?}");
     }
 }
 
@@ -398,7 +387,10 @@ fn the_theme_toggle_switches_light_and_dark() {
 
 #[test]
 fn reduced_motion_turns_animation_off() {
-    let mut h = harness();
+    // Not through `harness()`: that one is already reduced.
+    let mut h = Harness::builder().with_size(vec2(1280.0, 1400.0)).build_ui_state(|ui, s: &mut Showcase| s.ui(ui), Showcase::new());
+    h.step();
+    h.step();
     assert!(h.ctx.style_of(h.ctx.theme()).animation_time > 0.0);
     h.state_mut().set_reduced_motion(true);
     h.run();
@@ -408,7 +400,9 @@ fn reduced_motion_turns_animation_off() {
 #[test]
 fn the_footer_credits_mathlive_and_opens_about() {
     // Tall enough that the footer is on screen.
-    let mut h = Harness::builder().with_size(vec2(1280.0, 2000.0)).build_ui_state(|ui, s: &mut Showcase| s.ui(ui), Showcase::new());
+    let mut app = Showcase::new();
+    app.set_reduced_motion(true);
+    let mut h = Harness::builder().with_size(vec2(1280.0, 2000.0)).build_ui_state(|ui, s: &mut Showcase| s.ui(ui), app);
     h.run();
     h.get_by_label("MathLive");
     assert_eq!(CREDIT, "Typing behaviour is modelled on MathLive. Independent Rust implementation, not affiliated.");
@@ -440,6 +434,8 @@ fn visible_strings_have_no_long_dashes() {
         include_str!("../src/showcase.rs"),
         include_str!("../src/palette.rs"),
         include_str!("../src/export.rs"),
+        include_str!("../src/fab.rs"),
+        include_str!("../src/logo.rs"),
         include_str!("../src/theme.rs"),
         include_str!("../index.html"),
         include_str!("../../../crates/egui/src/lib.rs"),
@@ -465,4 +461,88 @@ fn the_header_links_to_the_source_at_every_width() {
         }
     }
     assert!(equashion_web::GITHUB_URL.starts_with("https://github.com/shuff57/equaSHion"));
+}
+
+fn fab_harness() -> Harness<'static, Showcase> {
+    harness_at(1280.0)
+}
+
+#[test]
+fn the_report_buttons_are_bottom_right_and_open_the_panel() {
+    let mut h = fab_harness();
+    h.get_by_label("Report a Bug");
+    h.get_by_label("Reported issues");
+    assert!(!h.state().fab().is_open());
+    let (main, list) = (h.state().fab().rects().main.expect("main"), h.state().fab().rects().list.expect("list"));
+    assert!((main.width() - 48.0).abs() < 0.5 && (list.width() - 40.0).abs() < 0.5);
+    assert!((1280.0 - main.right() - 24.0).abs() < 1.5, "{main:?}");
+    assert!(list.bottom() < main.top());
+    h.get_by_label("Report a Bug").click();
+    h.run();
+    assert!(h.state().fab().is_open());
+    h.get_by_label("Report an issue");
+    for k in ["Bug", "Quirk", "Improve"] {
+        h.get_by_label(k);
+    }
+    h.get_by_label("Send report");
+    // An empty report is refused in words.
+    h.get_by_label("Send report").click();
+    h.run();
+    assert_eq!(h.state().fab().error(), Some("Add a short title."));
+    assert!(h.state_mut().fab_mut().take_requests().is_empty());
+    h.get_by_label("Add a short title.");
+}
+
+#[test]
+fn escape_closes_the_panel_and_a_click_outside_does_too() {
+    let mut h = fab_harness();
+    h.state_mut().fab_mut().toggle(equashion_web::fab::View::Form);
+    h.run();
+    assert!(h.state().fab().is_open());
+    h.key_press(Key::Escape);
+    h.run();
+    assert!(!h.state().fab().is_open());
+    h.state_mut().fab_mut().toggle(equashion_web::fab::View::List);
+    h.run();
+    assert!(h.state().fab().is_open());
+    h.get_by_label("Try it").click();
+    h.run();
+    assert!(!h.state().fab().is_open());
+}
+
+#[test]
+fn a_report_is_queued_with_the_equation_in_it() {
+    use equashion_web::fab::{Request, View};
+    let mut h = fab_harness();
+    h.state_mut().set_latex(r"\frac{a}{b}");
+    h.state_mut().fab_mut().toggle(View::Form);
+    assert!(h.state_mut().fab_mut().fill("quirk", "Picky sqrt", "It wants a space."));
+    h.run();
+    h.get_by_label("Send report").click();
+    h.run();
+    let reqs = h.state_mut().fab_mut().take_requests();
+    let [Request::Submit(body)] = reqs.as_slice() else { panic!("{reqs:?}") };
+    assert!(body.contains("\"latex\":\"\\\\frac{a}{b}\""), "{body}");
+    assert!(body.contains("\"kind\":\"quirk\""));
+    h.get_by_label("Submitting...");
+}
+
+#[test]
+fn the_mug_needs_the_widget_and_asks_the_shell_to_click_it() {
+    use equashion_web::fab::Request;
+    let mut h = fab_harness();
+    assert!(h.query_by_label("Buy me a coffee").is_none(), "no widget, no mug");
+    h.state_mut().fab_mut().set_coffee_available(true);
+    h.run();
+    h.get_by_label("Buy me a coffee").click();
+    h.run();
+    assert_eq!(h.state_mut().fab_mut().take_requests(), vec![Request::OpenCoffee]);
+}
+
+#[test]
+fn the_wordmark_is_there_at_every_width() {
+    for w in [1280.0, 390.0] {
+        let h = harness_at(w);
+        h.get_by_label("equaSHion");
+    }
 }

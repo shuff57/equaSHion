@@ -38,12 +38,8 @@ pub enum CopyKind {
 }
 
 impl CopyKind {
-    /// Every kind, in button order: the main row, then the "More" row.
+    /// Every kind, in button order.
     pub const ALL: [CopyKind; 6] = [CopyKind::Latex, CopyKind::MathMl, CopyKind::Image, CopyKind::Omml, CopyKind::Text, CopyKind::Svg];
-    /// The buttons always shown.
-    pub const MAIN: [CopyKind; 3] = [CopyKind::Latex, CopyKind::MathMl, CopyKind::Image];
-    /// The buttons behind "More".
-    pub const MORE: [CopyKind; 3] = [CopyKind::Omml, CopyKind::Text, CopyKind::Svg];
 
     /// The name the `copy(kind)` hook takes.
     pub fn name(self) -> &'static str {
@@ -78,6 +74,18 @@ impl CopyKind {
         }
     }
 
+    /// The short name shown on the button.
+    pub fn short(self) -> &'static str {
+        match self {
+            CopyKind::Latex => "LaTeX",
+            CopyKind::MathMl => "MathML",
+            CopyKind::Image => "Image",
+            CopyKind::Omml => "OMML",
+            CopyKind::Text => "Text",
+            CopyKind::Svg => "SVG",
+        }
+    }
+
     /// The button tooltip: what it puts where.
     pub fn hint(self) -> &'static str {
         match self {
@@ -90,11 +98,6 @@ impl CopyKind {
             CopyKind::Text => "Plain linear text such as a/b and x^2",
             CopyKind::Svg => "Save the equation as an SVG file, black ink",
         }
-    }
-
-    /// True for the kinds behind "More".
-    pub fn is_more(self) -> bool {
-        CopyKind::MORE.contains(&self)
     }
 
     /// True when the action saves a file instead of using the clipboard.
