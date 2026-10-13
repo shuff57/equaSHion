@@ -2,3 +2,4 @@
 /dist
 /tests/browser/out
 /.wrangler
+/.playwright-cli
