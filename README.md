@@ -89,8 +89,25 @@ The example shows the widget with live linear and OMML readouts.
 One eframe app compiled to wasm (WebGL2 through glow, no wgpu, no JavaScript framework). It is a
 tool: type an equation, copy it out.
 
-![The page in the light theme](docs/editor-light.png)
-![The page in the dark theme](docs/editor-dark.png)
+![A short demo: the loading animation, typing an equation, Copy LaTeX and Copy MathML, the dark theme and the Report a Bug panel](docs/demo.gif)
+
+The same demo as video: [demo.mp4](docs/demo.mp4) or [demo.webm](docs/demo.webm).
+
+| Light | Dark |
+|---|---|
+| ![The page in the light theme](docs/editor-light.png) | ![The page in the dark theme](docs/editor-dark.png) |
+
+| Report a Bug panel | Narrow screen (700 px) |
+|---|---|
+| ![The Report an issue panel open over the page, dark theme](docs/report-panel.png) | ![The page at 700 px wide, the Copy buttons wrapping to three by two](docs/editor-narrow.png) |
+
+While the page loads (about 4 seconds, longer only if the app is still starting) the wordmark types
+itself and sets into a fraction, then the page fades in:
+
+![The loading animation: S/H typed, set as a fraction, the word growing around it](docs/loading.gif)
+
+The screenshots come from `cargo xtask smoke` (`tests/browser/out/`), and the demo from the page
+itself driven through `window.equashion` and real clicks in headless Chromium.
 
 One centred column, top to bottom:
 
