@@ -561,7 +561,9 @@ impl EquationEditor {
 
     /// Lay the current tree out and render it, unless the last canvas already shows it.
     fn refresh_canvas(&mut self, ui: &Ui) {
-        let shown = self.ed.display_math();
+        // Empty places draw their own dotted box in the layout, so the tree is shown as it is: the
+        // widget's geometry is then exactly that of a page laying the same equation out.
+        let shown = self.ed.math().clone();
         let ppp = f64::from(ui.ctx().pixels_per_point()).max(1.0);
         let want = (ppp * 2.0).min(MAX_SCALE);
         if self.canvas.as_ref().is_some_and(|c| c.shown == shown && c.want == want) {

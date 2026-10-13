@@ -70,6 +70,9 @@ pub struct SeqGeo {
     /// Vertical extent of the caret in this row (y down, baseline 0).
     pub top: f64,
     pub bottom: f64,
+    /// Horizontal extent of the row when it is wider than its caret positions say: an empty slot
+    /// has one caret position but shows a box to click in.
+    pub x_range: Option<(f64, f64)>,
 }
 
 impl MathBox {
@@ -100,6 +103,10 @@ impl MathBox {
         for mut g in o.geo {
             for x in &mut g.xs {
                 *x += dx;
+            }
+            if let Some((a, b)) = g.x_range.as_mut() {
+                *a += dx;
+                *b += dx;
             }
             g.top += dy;
             g.bottom += dy;
@@ -435,6 +442,9 @@ struct Lay<'f> {
     nary_body: bool,
     /// (node, character) in the row being laid out where a differential `dx` starts.
     thin_at: Option<(usize, usize)>,
+    /// The next row laid out is the empty base of a script that has something after it (the `n`
+    /// of `ₙC_r`): it shows no box, only the scripts are places.
+    bare_base: bool,
 }
 
 /// Ink box of a glyph in font units, y down: (x0, y0, x1, y1).
@@ -603,6 +613,7 @@ impl Lay<'_> {
         let mut prev = Class::None;
         let path = self.path.clone();
         let body_of_nary = std::mem::take(&mut self.nary_body);
+        let bare = std::mem::take(&mut self.bare_base);
         let thin = if body_of_nary { differential(s) } else { None };
         for (i, n) in s.iter().enumerate() {
             if self.budget == 0 {
@@ -610,7 +621,16 @@ impl Lay<'_> {
             }
             self.cur = i;
             self.thin_at = thin;
+            // A script with no base and something after it (the `n` of `ₙC_r`): its base shows no box.
+            self.bare_base = i + 1 < s.len() && matches!(n, Node::Script { base, sub, sup } if base.is_empty() && (sub.is_some() || sup.is_some()));
             self.node(n, st, depth, &mut prev, &mut parts, &mut marks);
+            self.bare_base = false;
+        }
+        // An empty argument of a structure (under a radical, in a fraction, in a script) shows a
+        // dotted box, so it reads as a place to type. The top-level row stays blank.
+        let slot = s.is_empty() && !path.is_empty() && !bare && self.budget > 0;
+        if slot {
+            parts.push(self.slot_box(self.size * st.factor()));
         }
         // x of every part boundary, then of every caret unit.
         let mut pre = vec![0.0];
@@ -623,13 +643,45 @@ impl Lay<'_> {
         let mut xs: Vec<f64> = marks.iter().map(|m| at(m.0) + m.2 * (at(m.1) - at(m.0))).collect();
         xs.push(x);
         let sz = self.size * st.factor();
+        // The caret of an empty slot sits just inside the box's left edge.
+        let x_range = if slot {
+            xs = vec![0.1 * sz];
+            Some((0.0, x))
+        } else {
+            None
+        };
         if self.path.is_empty() && depth == 0 && x > self.wrap {
             let brks = std::mem::take(&mut self.brks);
             return self.wrapped(parts, &brks, sz, st != St::Display);
         }
         let mut row = MathBox::row(parts);
-        row.geo.push(SeqGeo { path, xs, top: (-row.asc).min(-0.72 * sz), bottom: row.desc.max(0.22 * sz) });
+        row.geo.push(SeqGeo { path, xs, top: (-row.asc).min(-0.72 * sz), bottom: row.desc.max(0.22 * sz), x_range });
         row
+    }
+
+    /// The dotted box an empty slot shows: about a letter wide and as tall as a capital.
+    fn slot_box(&self, sz: f64) -> MathBox {
+        let (w, top, bottom) = (0.5 * sz, -0.7 * sz, 0.02 * sz);
+        let t = (0.04 * sz).max(0.5);
+        let d = (0.1 * sz).max(1.2);
+        let mut b = MathBox::default();
+        let mut x = 0.0;
+        while x < w {
+            let x1 = (x + d).min(w);
+            b.rule(x, top, x1, top + t);
+            b.rule(x, bottom - t, x1, bottom);
+            x += 2.0 * d;
+        }
+        let mut y = top;
+        while y < bottom {
+            let y1 = (y + d).min(bottom);
+            b.rule(0.0, y, t, y1);
+            b.rule(w - t, y, w, y1);
+            y += 2.0 * d;
+        }
+        // The box's own width and height, not its dashes' extent.
+        b.w = w;
+        b
     }
 
     /// The top-level `parts` broken into lines of at most `self.wrap` points, stacked left-aligned.
@@ -1520,6 +1572,7 @@ fn lay_once(fonts: &dyn MathFonts, m: &Math, family: &str, size: f64, bold: bool
         brks: vec![],
         nary_body: false,
         thin_at: None,
+        bare_base: false,
     };
     let st = if display { St::Display } else { St::Text };
     lay.seq(&m.body, st, 0)
@@ -1565,7 +1618,10 @@ impl EqLayout {
     /// not laid out.
     pub fn row_rect(&self, path: &[(usize, usize)]) -> Option<Rect> {
         let g = self.row(path)?;
-        let (x0, x1) = (g.xs.first().copied()?, g.xs.last().copied()?);
+        let (x0, x1) = match g.x_range {
+            Some(r) => r,
+            None => (g.xs.first().copied()?, g.xs.last().copied()?),
+        };
         Some(Rect::new(x0.min(x1), g.top, x0.max(x1), g.bottom))
     }
 
@@ -1592,7 +1648,7 @@ impl EqLayout {
 pub fn hit_geo(geo: &[SeqGeo], x: f64, y: f64) -> equashion_math::Caret {
     const NEAR: f64 = 1.5;
     let dist = |g: &SeqGeo| {
-        let (x0, x1) = (g.xs.first().copied().unwrap_or(0.0), g.xs.last().copied().unwrap_or(0.0));
+        let (x0, x1) = g.x_range.unwrap_or((g.xs.first().copied().unwrap_or(0.0), g.xs.last().copied().unwrap_or(0.0)));
         let dx = (x0 - x).max(x - x1).max(0.0);
         let dy = (g.top - y).max(y - g.bottom).max(0.0);
         dx.hypot(dy)
@@ -1654,7 +1710,13 @@ pub fn layout_equation_wrapped(
     let geo = b
         .geo
         .iter()
-        .map(|g| SeqGeo { path: g.path.clone(), xs: g.xs.iter().map(|x| x + ox).collect(), top: g.top + oy, bottom: g.bottom + oy })
+        .map(|g| SeqGeo {
+            path: g.path.clone(),
+            xs: g.xs.iter().map(|x| x + ox).collect(),
+            top: g.top + oy,
+            bottom: g.bottom + oy,
+            x_range: g.x_range.map(|(a, b)| (a + ox, b + ox)),
+        })
         .collect();
     EqLayout { scene: Scene { items, width: b.w + 2.0 * pad, height: asc + desc + 2.0 * pad }, geo, baseline: oy }
 }
@@ -2059,6 +2121,24 @@ mod tests {
         // Far outside lands on the nearest end of the top row.
         assert_eq!(l.hit(-500.0, 0.0), equashion_math::Caret { path: vec![], pos: 0 });
         assert_eq!(l.hit(5000.0, 0.0).path, Vec::<(usize, usize)>::new());
+    }
+
+    #[test]
+    fn an_empty_slot_shows_a_box_you_can_click_in() {
+        // A square root with nothing under it: the radicand is a dotted box, as wide as a letter,
+        // the bar runs over it, and a click in the box lands in the radicand, not beside it.
+        let empty = lay("sqrt()", false);
+        let filled = lay("sqrt(x)", false);
+        assert!(empty.w > 0.4 * 20.0 && empty.w > filled.w * 0.6, "{} vs {}", empty.w, filled.w);
+        assert!(empty.rules() >= 8, "the box is dashes: {} rules", empty.rules());
+        let l = eq(&from_linear("sqrt()"));
+        let row = l.row_rect(&[(0, 0)]).expect("the radicand row was laid out");
+        assert!(row.x1 - row.x0 > 5.0, "the slot has a box to click in: {row:?}");
+        let hit = l.hit((row.x0 + row.x1) / 2.0, (row.y0 + row.y1) / 2.0);
+        assert_eq!(hit.path, vec![(0, 0)]);
+        assert_eq!(hit.pos, 0);
+        // The top-level row of an empty equation stays blank.
+        assert_eq!(lay("", false).rules(), 0);
     }
 
     #[test]
