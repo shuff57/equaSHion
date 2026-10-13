@@ -14,76 +14,6 @@ It is the equation editor extracted from WordCraft at `dbfe1b1`, with three edit
 from DeckCraft at `7972cf5`. See [PROVENANCE.md](PROVENANCE.md) for what was taken and changed,
 and [DIVERGENCE.md](DIVERGENCE.md) for behaviour that now differs from WordCraft.
 
-## Crates
-
-| Crate | Path | Depends on | What it does |
-|---|---|---|---|
-| `equashion-math` | `crates/math` | quick-xml, serde | Math tree, OMML import/export, presentation MathML import/export (`to_mathml`, `from_mathml`), linear format, templates, edit model (`Editor`, `Caret`, `Key`) |
-| `equashion-font` | `crates/font` | skrifa, harfrust, kurbo | Font database (`FontDb`, `FontDb::bundled_only()`), outlines, fallback, shaping; bundles Source Serif 4 (default family), Inter and STIX Two Math (symbol fallback) |
-| `equashion-layout` | `crates/layout` | math, font, kurbo | `layout_equation` -> `EqLayout` (a `Scene` plus caret rectangles and hit testing), `layout_math_wrapped`, `LayoutCache`, the `MathFonts` trait |
-| `equashion-render` | `crates/render` | layout, vello_cpu | `render_scene` / `render_eq` to premultiplied RGBA, `scene_to_svg` |
-| `equashion-egui` | `crates/egui` | math, layout, render, egui | `EquationEditor`: the equation editor as an egui widget (palette, canvas with caret, linear field), no host types |
-| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web page: the editor with a symbol palette, a Copy button per format (LaTeX, MathML, image, OMML, text, SVG), paste-in, examples, light and dark themes, `window.equashion` test hooks |
-| `xtask` | `xtask` | std | `cargo xtask check`, `bless`, `web`, `serve`, `smoke` |
-
-```rust
-use equashion_layout::{DEFAULT_FAMILY, FontDb, Rgb, layout_equation};
-
-let fonts = FontDb::bundled_only();
-let m = equashion_math::from_linear(r"x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}");
-let eq = layout_equation(&fonts, &m, DEFAULT_FAMILY, 24.0, true, Rgb::BLACK, 4.0);
-let svg = equashion_render::scene_to_svg(&eq.scene, &fonts, DEFAULT_FAMILY);
-let pixels = equashion_render::render_eq(&eq, &fonts, 2.0);
-```
-
-`equashion-layout`, `equashion-render` and `equashion-egui` build for `wasm32-unknown-unknown`.
-
-## The egui widget
-
-```rust
-use equashion_egui::EquationEditor;
-
-let mut editor = EquationEditor::with_linear(r"\frac{a}{b}"); // or ::new(), ::with_omml(xml)
-// every frame:
-let r = editor.show(ui);
-if r.changed   { /* editor.linear(), editor.omml(), editor.math() */ }
-if r.committed { /* Enter: keep editor.omml() */ }
-if r.cancelled { editor.revert(); /* Esc (confirmed when there were changes) */ }
-```
-
-| Item | What it is |
-|---|---|
-| `EquationEditor::new()`, `with_linear(&str)`, `with_omml(&str)` | Construct (OMML import never fails, so `with_omml` returns `Self`) |
-| `.id_salt(h)`, `.fonts(Arc<FontDb>)`, `.family(&str)`, `.font_size(pt)`, `.canvas_height(pt)`, `.show_palette(bool)`, `.show_linear_field(bool)`, `.auto_focus(bool)`, `.caret_blink(bool)` | Builder options (`set_caret_blink` on an existing editor, for reduced motion) |
-| `show(&mut self, &mut Ui) -> EditorResponse` | Draw palette, canvas, linear field and message line |
-| `EditorResponse { changed, committed, cancelled, response, rect }` | `response` is the canvas, `rect` the whole widget |
-| `linear()`, `omml()`, `math()`, `unknown_commands()` | Read the equation |
-| `set_linear(&str)`, `set_omml(&str)`, `set_math(Math)` | Load (resets the Esc baseline) |
-| `revert()`, `is_dirty()`, `mark_clean()`, `message()` | Esc baseline and the status line |
-| `editor()`, `editor_mut()` + `sync_linear()` | The underlying `equashion_math::Editor` |
-| `canvas_id()`, `linear_id()`, `id()` | egui ids (all derived from the widget id) |
-
-Keys: typing builds the tree (`x^2`, `a/b`, `sqrt`, `alpha`, `\frac{..}{..}`), arrows / Home /
-End / Backspace / Delete edit it, Tab and Shift+Tab move between places, Ctrl+Z, Ctrl+Shift+Z
-and Ctrl+Y undo and redo, Ctrl+A selects all, Ctrl+C / Ctrl+X copy and cut the selection as
-linear text, Enter commits, Esc cancels (the first Esc with changes only asks). A click places
-the caret, a drag or Shift+click selects, also across rows.
-
-Shared-context rules the widget keeps (pinned by `crates/egui/tests/shared_context.rs`): it never
-calls `set_fonts`, `set_visuals` or `set_style`; it uses only `FontId::proportional` /
-`FontId::monospace`; equation and palette glyphs are rasterised by `equashion-render` and drawn
-as textures tinted with `ui.visuals()` colours (works in light and dark; the canvas also takes the
-host's control corner radius); texture names start
-with `equashion/`; it reads keys only while its canvas has focus and never takes focus from
-another widget.
-
-```sh
-cargo run -p equashion-egui --example widget            # native window, dark
-cargo run -p equashion-egui --example widget -- --light # light theme
-```
-
-The example shows the widget with live linear and OMML readouts.
-
 ## The web page
 
 One eframe app compiled to wasm (WebGL2 through glow, no wgpu, no JavaScript framework). It is a
@@ -270,6 +200,76 @@ in both themes at 1280 and 700 px wide (closed, and with every disclosure and Ab
 (`tests/browser/check_png.py`). The page is plain egui and is also tested natively with
 egui_kittest (`apps/equashion-web/tests/showcase.rs`). The corpus selftest still runs through
 the `selftest()` hook, though it is no longer on the page.
+
+## Crates
+
+| Crate | Path | Depends on | What it does |
+|---|---|---|---|
+| `equashion-math` | `crates/math` | quick-xml, serde | Math tree, OMML import/export, presentation MathML import/export (`to_mathml`, `from_mathml`), linear format, templates, edit model (`Editor`, `Caret`, `Key`) |
+| `equashion-font` | `crates/font` | skrifa, harfrust, kurbo | Font database (`FontDb`, `FontDb::bundled_only()`), outlines, fallback, shaping; bundles Source Serif 4 (default family), Inter and STIX Two Math (symbol fallback) |
+| `equashion-layout` | `crates/layout` | math, font, kurbo | `layout_equation` -> `EqLayout` (a `Scene` plus caret rectangles and hit testing), `layout_math_wrapped`, `LayoutCache`, the `MathFonts` trait |
+| `equashion-render` | `crates/render` | layout, vello_cpu | `render_scene` / `render_eq` to premultiplied RGBA, `scene_to_svg` |
+| `equashion-egui` | `crates/egui` | math, layout, render, egui | `EquationEditor`: the equation editor as an egui widget (palette, canvas with caret, linear field), no host types |
+| `equashion-web` | `apps/equashion-web` | egui widget, render, eframe (wasm, glow) | The web page: the editor with a symbol palette, a Copy button per format (LaTeX, MathML, image, OMML, text, SVG), paste-in, examples, light and dark themes, `window.equashion` test hooks |
+| `xtask` | `xtask` | std | `cargo xtask check`, `bless`, `web`, `serve`, `smoke` |
+
+```rust
+use equashion_layout::{DEFAULT_FAMILY, FontDb, Rgb, layout_equation};
+
+let fonts = FontDb::bundled_only();
+let m = equashion_math::from_linear(r"x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}");
+let eq = layout_equation(&fonts, &m, DEFAULT_FAMILY, 24.0, true, Rgb::BLACK, 4.0);
+let svg = equashion_render::scene_to_svg(&eq.scene, &fonts, DEFAULT_FAMILY);
+let pixels = equashion_render::render_eq(&eq, &fonts, 2.0);
+```
+
+`equashion-layout`, `equashion-render` and `equashion-egui` build for `wasm32-unknown-unknown`.
+
+## The egui widget
+
+```rust
+use equashion_egui::EquationEditor;
+
+let mut editor = EquationEditor::with_linear(r"\frac{a}{b}"); // or ::new(), ::with_omml(xml)
+// every frame:
+let r = editor.show(ui);
+if r.changed   { /* editor.linear(), editor.omml(), editor.math() */ }
+if r.committed { /* Enter: keep editor.omml() */ }
+if r.cancelled { editor.revert(); /* Esc (confirmed when there were changes) */ }
+```
+
+| Item | What it is |
+|---|---|
+| `EquationEditor::new()`, `with_linear(&str)`, `with_omml(&str)` | Construct (OMML import never fails, so `with_omml` returns `Self`) |
+| `.id_salt(h)`, `.fonts(Arc<FontDb>)`, `.family(&str)`, `.font_size(pt)`, `.canvas_height(pt)`, `.show_palette(bool)`, `.show_linear_field(bool)`, `.auto_focus(bool)`, `.caret_blink(bool)` | Builder options (`set_caret_blink` on an existing editor, for reduced motion) |
+| `show(&mut self, &mut Ui) -> EditorResponse` | Draw palette, canvas, linear field and message line |
+| `EditorResponse { changed, committed, cancelled, response, rect }` | `response` is the canvas, `rect` the whole widget |
+| `linear()`, `omml()`, `math()`, `unknown_commands()` | Read the equation |
+| `set_linear(&str)`, `set_omml(&str)`, `set_math(Math)` | Load (resets the Esc baseline) |
+| `revert()`, `is_dirty()`, `mark_clean()`, `message()` | Esc baseline and the status line |
+| `editor()`, `editor_mut()` + `sync_linear()` | The underlying `equashion_math::Editor` |
+| `canvas_id()`, `linear_id()`, `id()` | egui ids (all derived from the widget id) |
+
+Keys: typing builds the tree (`x^2`, `a/b`, `sqrt`, `alpha`, `\frac{..}{..}`), arrows / Home /
+End / Backspace / Delete edit it, Tab and Shift+Tab move between places, Ctrl+Z, Ctrl+Shift+Z
+and Ctrl+Y undo and redo, Ctrl+A selects all, Ctrl+C / Ctrl+X copy and cut the selection as
+linear text, Enter commits, Esc cancels (the first Esc with changes only asks). A click places
+the caret, a drag or Shift+click selects, also across rows.
+
+Shared-context rules the widget keeps (pinned by `crates/egui/tests/shared_context.rs`): it never
+calls `set_fonts`, `set_visuals` or `set_style`; it uses only `FontId::proportional` /
+`FontId::monospace`; equation and palette glyphs are rasterised by `equashion-render` and drawn
+as textures tinted with `ui.visuals()` colours (works in light and dark; the canvas also takes the
+host's control corner radius); texture names start
+with `equashion/`; it reads keys only while its canvas has focus and never takes focus from
+another widget.
+
+```sh
+cargo run -p equashion-egui --example widget            # native window, dark
+cargo run -p equashion-egui --example widget -- --light # light theme
+```
+
+The example shows the widget with live linear and OMML readouts.
 
 ## Checks
 
