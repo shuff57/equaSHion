@@ -411,6 +411,11 @@ impl Logo {
         self.start = None;
     }
 
+    /// Show the settled word from the first frame (the animation already played elsewhere).
+    pub fn settle(&mut self) {
+        self.start = Some(-DURATION);
+    }
+
     fn ensure_raster(&mut self, ctx: &Context) {
         let ppp = ctx.pixels_per_point();
         if self.raster.as_ref().is_some_and(|r| (r.ppp - ppp).abs() < 1e-3) {

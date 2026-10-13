@@ -31,7 +31,7 @@ wasm-bindgen = "=0.2.128"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 web-sys = { version = "0.3", features = [
-    "Window", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlInputElement", "CssStyleDeclaration", "Location", "MediaQueryList",
+    "Window", "Performance", "Document", "Element", "HtmlElement", "HtmlCanvasElement", "HtmlInputElement", "CssStyleDeclaration", "Location", "MediaQueryList",
     "Navigator", "Storage", "Event", "EventTarget", "ClipboardEvent", "DataTransfer", "DataTransferItem", "DataTransferItemList",
     "HtmlDocument", "HtmlAnchorElement", "Blob", "BlobPropertyBag", "Url", "File", "FileList", "FileReader", "Headers", "Request", "RequestInit", "Response",
 ] }

@@ -88,6 +88,11 @@ pub fn start() {
                 Box::new(|cc| {
                     let mut app = Showcase::new();
                     app.set_reduced_motion(prefers_reduced_motion());
+                    if splash_wanted() {
+                        // The splash plays the wordmark while the page loads; the header's copy then
+                        // starts where it ended instead of playing it a second time.
+                        app.settle_logo();
+                    }
                     app.install(&cc.egui_ctx);
                     let shared: Shared = Rc::new(RefCell::new(app));
                     if let Err(e) = install_hooks(shared.clone(), cc.egui_ctx.clone()) {
@@ -99,13 +104,46 @@ pub fn start() {
                 }),
             )
             .await;
+        if result.is_ok() {
+            hold_splash().await;
+        }
         if let Some(el) = document.get_element_by_id(LOADING_ID) {
             match result {
-                Ok(()) => el.remove(),
+                Ok(()) => fade_out(&el).await,
                 Err(e) => el.set_inner_html(&format!("<p>equaSHion failed to start: {e:?}</p><p>A browser with WebGL2 is required.</p>")),
             }
         }
     });
+}
+
+/// How long the loading splash stays up at least, from the start of the page: about 4 s, after
+/// the word has set (3.5 s of the wordmark's motion). It stays longer only while the app is still
+/// loading. `?splash=0` skips it (the browser tests).
+const SPLASH_MS: f64 = 4000.0;
+
+fn splash_wanted() -> bool {
+    let search = web_sys::window().and_then(|w| w.location().search().ok()).unwrap_or_default();
+    !search.trim_start_matches('?').split('&').any(|kv| kv == "splash=0")
+}
+
+/// Wait out what is left of the splash's animation.
+async fn hold_splash() {
+    if !splash_wanted() {
+        return;
+    }
+    let now = web_sys::window().and_then(|w| w.performance()).map_or(SPLASH_MS, |p| p.now());
+    if now < SPLASH_MS {
+        sleep_ms((SPLASH_MS - now).ceil() as i32).await;
+    }
+}
+
+/// Fade the splash away (the CSS has the transition), then remove it.
+async fn fade_out(el: &web_sys::Element) {
+    if let Some(h) = el.dyn_ref::<web_sys::HtmlElement>() {
+        let _ = h.style().set_property("opacity", "0");
+        sleep_ms(380).await;
+    }
+    el.remove();
 }
 
 struct WebApp {

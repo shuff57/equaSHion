@@ -34,7 +34,9 @@ frames() { pw --raw eval "async () => { for (let i = 0; i < ${1:-8}; i++) await 
 ROWS="$(grep -v '^#' "$ROOT/corpus/equations.tsv" | grep -c .)"
 echo "smoke: $URL (corpus rows: $ROWS)"
 
-pw open "$URL" >/dev/null
+# ?splash=0: skip the 4 s loading animation (it would cover the page in the screenshots).
+case "$URL" in *\?*) SPLASH_URL="$URL&splash=0" ;; *) SPLASH_URL="$URL?splash=0" ;; esac
+pw open "$SPLASH_URL" >/dev/null
 pw resize 1280 900 >/dev/null
 
 # The hooks appear once eframe has started the app (WebGL2 context, first frame).
@@ -72,31 +74,34 @@ check "copy rejects an unknown kind" "eq.copy('pdf').then(() => 'resolved', e =>
 
 # A real click on Copy LaTeX: the copy event path runs inside the user gesture. Record what the
 # page hands the clipboard (DataTransfer.setData) without needing clipboard-read permission.
-pw --raw eval "() => { window.__eqSet = []; const o = DataTransfer.prototype.setData; DataTransfer.prototype.setData = function (t, d) { window.__eqSet.push([t, d]); return o.call(this, t, d); }; return true; }" >/dev/null
+pw --raw eval "() => { window.__eqSet = []; window.__eqLast = null; setInterval(() => { const s = window.equashion.copyStatus(); if (s && s.state !== 'pending') window.__eqLast = s; }, 20); const o = DataTransfer.prototype.setData; DataTransfer.prototype.setData = function (t, d) { window.__eqSet.push([t, d]); return o.call(this, t, d); }; return true; }" >/dev/null
 eq_rect() { pw --raw eval "() => { const r = window.equashion.copyButtonRect('$1'); return r ? Math.round(r.x + r.w / 2) + ' ' + Math.round(r.y + r.h / 2) : 'none'; }" | tr -d '"'; }
+# Press a Copy button with a real click; a click that lands before the page has laid out again
+# is tried once more (up to three times). Leaves what the page wrote in window.__eqSet / __eqLast.
+click_copy() {
+    local kind="$1" i got
+    for i in 1 2 3; do
+        frames 4
+        read -r CX CY <<<"$(eq_rect "$kind")"
+        [ "$CX" != "none" ] || fail "no Copy $kind button rect"
+        pw --raw eval "() => { window.__eqSet = []; window.__eqLast = null; return true; }" >/dev/null
+        pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
+        frames 8
+        got="$(pw --raw eval "async () => { for (let i = 0; i < 20; i++) { if (window.__eqLast) return 'yes'; await new Promise(r => setTimeout(r, 50)); } return 'no'; }" | tr -d '"')"
+        [ "$got" = "yes" ] && return 0
+    done
+    return 0
+}
 check "setLatex for the click" "eq.setLatex('x^2+1') === 'x^2+1'"
-frames 4
-read -r CX CY <<<"$(eq_rect latex)"
-[ "$CX" != "none" ] || fail "no Copy LaTeX button rect"
-pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
-frames 8
-check "click Copy LaTeX writes text/plain" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = eq.copyStatus(); if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return eq.copyStatus() || {}; })(); const w = window.__eqSet; return (s.kind === 'latex' && s.state === 'copied' && w.some(([t, d]) => t === 'text/plain' && d === 'x^2+1')) || [s, w]; })()"
+click_copy latex
+check "click Copy LaTeX writes text/plain" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = window.__eqLast; if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return window.__eqLast || {}; })(); const w = window.__eqSet; return (s.kind === 'latex' && s.state === 'copied' && w.some(([t, d]) => t === 'text/plain' && d === 'x^2+1')) || [s, w]; })()"
 check "setLatex for the MathML click" "eq.setLatex('\\\\frac{1}{2}') === '\\\\frac{1}{2}'"
-frames 4
-read -r CX CY <<<"$(eq_rect mathml)"
-[ "$CX" != "none" ] || fail "no Copy MathML button rect"
-pw --raw eval "() => { window.__eqSet = []; return true; }" >/dev/null
-pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
-frames 8
-check "click Copy MathML writes MathML as text and HTML" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = eq.copyStatus(); if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return eq.copyStatus() || {}; })(); const w = window.__eqSet; const t = w.find(x => x[0] === 'text/plain'), h = w.find(x => x[0] === 'text/html'); return (s.kind === 'mathml' && s.state === 'copied' && t && t[1].startsWith('<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">') && t[1].includes('<mfrac><mn>1</mn><mn>2</mn></mfrac>') && h && h[1].includes('<!--StartFragment-->' + t[1] + '<!--EndFragment-->')) || [s, w.map(x => x[0])]; })()"
+click_copy mathml
+check "click Copy MathML writes MathML as text and HTML" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = window.__eqLast; if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return window.__eqLast || {}; })(); const w = window.__eqSet; const t = w.find(x => x[0] === 'text/plain'), h = w.find(x => x[0] === 'text/html'); return (s.kind === 'mathml' && s.state === 'copied' && t && t[1].startsWith('<math xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"block\">') && t[1].includes('<mfrac><mn>1</mn><mn>2</mn></mfrac>') && h && h[1].includes('<!--StartFragment-->' + t[1] + '<!--EndFragment-->')) || [s, w.map(x => x[0])]; })()"
 # Every format has its own button, all showing at once.
 check "every format has a button" "['latex', 'mathml', 'image', 'omml', 'text', 'svg'].every(k => eq.copyButtonRect(k) !== null) || 'missing'"
-frames 4
-read -r CX CY <<<"$(eq_rect omml)"
-pw --raw eval "() => { window.__eqSet = []; return true; }" >/dev/null
-pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null
-frames 8
-check "click Copy OMML writes OMML text" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = eq.copyStatus(); if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return eq.copyStatus() || {}; })(); const w = window.__eqSet; return (s.kind === 'omml' && s.state === 'copied' && w.length === 1 && w[0][0] === 'text/plain' && w[0][1].startsWith('<m:oMath xmlns:m=')) || [s, w]; })()"
+click_copy omml
+check "click Copy OMML writes OMML text" "(async () => { const s = await (async () => { for (let i = 0; i < 60; i++) { const x = window.__eqLast; if (x && x.state !== 'pending') return x; await new Promise(r => setTimeout(r, 50)); } return window.__eqLast || {}; })(); const w = window.__eqSet; return (s.kind === 'omml' && s.state === 'copied' && w.length === 1 && w[0][0] === 'text/plain' && w[0][1].startsWith('<m:oMath xmlns:m=')) || [s, w]; })()"
 frames 4
 read -r CX CY <<<"$(eq_rect image)"
 pw mousemove "$CX" "$CY" >/dev/null; pw mousedown >/dev/null; pw mouseup >/dev/null

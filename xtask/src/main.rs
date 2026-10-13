@@ -130,8 +130,20 @@ fn cmd_web() -> Result<(), String> {
     if !found {
         return Err(format!("no .wasm in {}", dist.display()));
     }
+    write_loading_svg(&dist)?;
     eprintln!("xtask: web built into {}", dist.display());
     Ok(())
+}
+
+/// The loading splash's art: the motion wordmark with its `prefers-reduced-motion` rule removed, so
+/// it always plays. One source (assets/logo/equashion-motion.svg), one derived file in dist/.
+fn write_loading_svg(dist: &Path) -> Result<(), String> {
+    let src = root().join("assets/logo/equashion-motion.svg");
+    let svg = std::fs::read_to_string(&src).map_err(|e| format!("{}: {e}", src.display()))?;
+    let start = svg.find("  @media (prefers-reduced-motion: reduce) {").ok_or("no reduced-motion rule in equashion-motion.svg")?;
+    let end = start + svg[start..].find("\n  }\n").ok_or("unterminated reduced-motion rule")? + "\n  }\n".len();
+    let out = format!("{}{}", &svg[..start], &svg[end..]);
+    std::fs::write(dist.join("equashion-loading.svg"), out).map_err(|e| format!("equashion-loading.svg: {e}"))
 }
 
 fn port() -> u16 {

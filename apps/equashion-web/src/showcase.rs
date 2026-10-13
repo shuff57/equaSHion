@@ -200,7 +200,12 @@ impl Showcase {
         &mut self.fab
     }
 
-    /// Play the header's wordmark animation again.
+    /// Show the header's wordmark settled from the first frame (the loading splash already played it).
+    pub fn settle_logo(&mut self) {
+        self.logo.settle();
+    }
+
+    /// Play the header wordmark again.
     pub fn replay_logo(&mut self) {
         self.logo.replay();
     }

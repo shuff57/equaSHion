@@ -18,8 +18,13 @@
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f6f6f7; color: #5c5c66; }
     @media (prefers-color-scheme: dark) { html, body { background: #141416; color: #a3a3ad; } }
     #equashion_canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    /* The loading splash: the wordmark's own motion (equashion-loading.svg, made from
+       assets/logo/equashion-motion.svg by `cargo xtask web` with its reduced-motion rule left out, so it
+       always plays). It covers the app for about 4 s, longer only while the app is still loading; src/web.rs then fades it out. */
     #equashion_loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-      font: 14px system-ui, sans-serif; pointer-events: none; }
+      background: #f6f6f7; font: 14px system-ui, sans-serif; pointer-events: none; transition: opacity .35s ease; }
+    @media (prefers-color-scheme: dark) { #equashion_loading { background: #141416; } }
+    #equashion_loading img { width: min(440px, 72vw); height: auto; display: block; }
     /* Buy Me a Coffee: the egui mug (src/fab.rs) clicks BMC's own chip, which stays out of sight, and
        the payment panel hangs down from under the mug instead of up from the bottom. BMC ships
        !important rules and a min-height of 680px, so the min is released here and the height is
@@ -39,6 +44,6 @@
        report buttons are egui (src/fab.rs); src/web.rs clicks the widget's own button. To switch
        handles, change data-id. -->
   <script data-name="BMC-Widget" data-cfasync="false" src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js" data-id="shuff57" data-description="Support me on Buy me a coffee!" data-message="" data-color="#FFE08A" data-position="Right" data-x_margin="18" data-y_margin="18"></script>
-  <div id="equashion_loading">Loading equaSHion&hellip;</div>
+  <div id="equashion_loading"><img src="equashion-loading.svg" alt="Loading equaSHion" width="720" height="220"></div>
 </body>
 </html>
