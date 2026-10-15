@@ -17,13 +17,17 @@ struct App {
     committed: u32,
     cancelled: u32,
     changed: u32,
+    /// Edges the editor reported leaving through.
+    exits: Vec<Edge>,
+    /// Text painted into the host's layer last frame.
+    texts: Vec<String>,
     /// Ask for a second (discarded) pass every frame.
     discard: bool,
 }
 
 impl App {
     fn new(ed: EquationEditor) -> Self {
-        App { ed, other: None, host_text: None, committed: 0, cancelled: 0, changed: 0, discard: false }
+        App { ed, other: None, host_text: None, committed: 0, cancelled: 0, changed: 0, exits: vec![], texts: vec![], discard: false }
     }
 }
 
@@ -40,6 +44,12 @@ fn harness(app: App) -> Harness<'static, App> {
             a.committed += u32::from(r.committed);
             a.cancelled += u32::from(r.cancelled);
             a.changed += u32::from(r.changed);
+            a.exits.extend(r.exit);
+            let layer = ui.layer_id();
+            a.texts = ui.ctx().graphics(|g| {
+                let shapes = g.get(layer).into_iter().flat_map(|l| l.all_entries());
+                shapes.filter_map(|cs| if let egui::Shape::Text(t) = &cs.shape { Some(t.galley.text().to_string()) } else { None }).collect()
+            });
             if let Some(o) = a.other.as_mut() {
                 o.show(ui);
             }
@@ -641,4 +651,101 @@ fn display_style_follows_the_host() {
     };
     let (text, display) = (mk(false), mk(true));
     assert!(display.y > text.y + 1.0, "limits stack in display style: {text:?} vs {display:?}");
+}
+
+fn exiting() -> Harness<'static, App> {
+    let mut h = harness(App::new(EquationEditor::new().exit_at_edges(true)));
+    h.run();
+    h.run();
+    h
+}
+
+#[test]
+fn arrows_at_the_ends_report_exit_and_leave_the_caret() {
+    let mut h = exiting();
+    typ(&mut h, "x");
+    press(&mut h, Key::ArrowRight);
+    assert_eq!(h.state().exits, [Edge::Right]);
+    assert_eq!(ed(&h).editor().caret(), &Caret { path: vec![], pos: 1 });
+    press(&mut h, Key::ArrowLeft);
+    assert!(ed(&h).editor().caret().pos == 0 && h.state().exits.len() == 1, "the first Left moves");
+    press(&mut h, Key::ArrowLeft);
+    assert_eq!(h.state().exits, [Edge::Right, Edge::Left]);
+    assert_eq!(ed(&h).editor().caret().pos, 0);
+}
+
+#[test]
+fn shift_selection_and_slots_do_not_exit() {
+    let mut h = exiting();
+    typ(&mut h, "xy");
+    press_mod(&mut h, Modifiers::SHIFT, Key::ArrowRight);
+    assert!(h.state().exits.is_empty(), "Shift+Right at the end");
+    press_mod(&mut h, Modifiers::SHIFT, Key::ArrowLeft);
+    assert!(ed(&h).editor().selection().is_some());
+    press(&mut h, Key::ArrowRight);
+    assert!(h.state().exits.is_empty(), "Right with a selection only collapses it");
+    press(&mut h, Key::ArrowRight);
+    assert_eq!(h.state().exits, [Edge::Right]);
+
+    let mut h = exiting();
+    typ(&mut h, "a/b");
+    assert!(!ed(&h).editor().caret().path.is_empty());
+    press(&mut h, Key::ArrowRight);
+    assert!(h.state().exits.is_empty(), "Right inside a slot moves out of it");
+}
+
+#[test]
+fn without_the_option_the_arrow_is_a_no_op() {
+    let mut h = opened();
+    typ(&mut h, "x");
+    press(&mut h, Key::ArrowRight);
+    assert!(h.state().exits.is_empty());
+    assert_eq!(ed(&h).editor().caret(), &Caret { path: vec![], pos: 1 });
+}
+
+#[test]
+fn caret_to_lands_on_the_ends_of_the_top_row() {
+    let mut h = exiting();
+    typ(&mut h, "a/b+c");
+    h.state_mut().ed.caret_to(Edge::Left);
+    assert!(ed(&h).editor().at_start());
+    h.state_mut().ed.caret_to(Edge::Right);
+    assert!(ed(&h).editor().at_end());
+    // From inside a slot, with a selection.
+    press(&mut h, Key::ArrowLeft);
+    press_mod(&mut h, Modifiers::SHIFT, Key::ArrowLeft);
+    h.state_mut().ed.editor_mut().key(equashion_math::Key::Left, false);
+    h.state_mut().ed.caret_to(Edge::Right);
+    assert!(ed(&h).editor().at_end() && ed(&h).editor().selection().is_none());
+    h.state_mut().ed.editor_mut().move_to_start();
+    assert!(ed(&h).editor().at_start());
+}
+
+#[test]
+fn a_pending_command_stays_literal_when_the_caret_exits() {
+    let mut h = exiting();
+    typ(&mut h, "\\in");
+    let typed = ed(&h).math().clone();
+    assert!(to_linear(&typed).contains("in"));
+    press(&mut h, Key::ArrowRight);
+    assert_eq!(h.state().exits, [Edge::Right]);
+    assert_eq!(*ed(&h).math(), typed, "the half-typed command was not converted");
+    // Without exiting, the same key finishes the command (Right flushes it).
+    let mut h = opened();
+    typ(&mut h, "\\in");
+    press(&mut h, Key::ArrowRight);
+    assert_ne!(*ed(&h).math(), typed);
+}
+
+#[test]
+fn the_placeholder_shows_only_while_blank() {
+    fn drawn(h: &Harness<'static, App>, text: &str) -> bool {
+        h.state().texts.iter().any(|t| t == text)
+    }
+    let mut h = harness(App::new(EquationEditor::new().inline(true).placeholder("Type equation here")));
+    h.run_steps(3);
+    assert!(drawn(&h, "Type equation here"));
+    typ(&mut h, "x");
+    h.run_steps(2);
+    assert!(!drawn(&h, "Type equation here"));
 }

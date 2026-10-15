@@ -69,8 +69,16 @@ pub fn bundled_fonts() -> Arc<FontDb> {
     DB.get_or_init(|| Arc::new(FontDb::bundled_only())).clone()
 }
 
+/// An end of the equation's top row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Edge {
+    Left,
+    Right,
+}
+
 /// What happened in one [`EquationEditor::show`] call.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct EditorResponse {
     /// The equation (tree or display flag) changed this frame.
     pub changed: bool,
@@ -80,6 +88,11 @@ pub struct EditorResponse {
     /// commit, otherwise on the second press): the host should drop the edit. The widget
     /// keeps its content; call [`EquationEditor::revert`] to go back to the loaded equation.
     pub cancelled: bool,
+    /// With [`EquationEditor::exit_at_edges`]: an arrow key was pressed (no Shift, no selection)
+    /// with the caret already at that end of the top row, so the host should take the caret
+    /// across. The key is not consumed and the caret has not moved; a half-typed `\name` is
+    /// left as typed.
+    pub exit: Option<Edge>,
     /// The canvas: focus, hover and the rectangle typing goes to.
     pub response: egui::Response,
     /// The whole widget (palette, canvas, linear field, message line).
@@ -123,6 +136,10 @@ pub struct EquationEditor {
     overlay: bool,
     /// The idle caret blinks (off for hosts that honour reduced motion).
     caret_blink: bool,
+    /// Report an arrow pressed at an end of the top row as [`EditorResponse::exit`].
+    exit_at_edges: bool,
+    /// Shown, dimmed, while the equation is blank.
+    placeholder: Option<String>,
     ed: Editor,
     /// Text of the linear field.
     linear: String,
@@ -182,6 +199,8 @@ impl EquationEditor {
             overlay: false,
             display_style: true,
             caret_blink: true,
+            exit_at_edges: false,
+            placeholder: None,
             ed: Editor::new(Math::default()),
             linear: String::new(),
             initial: Math::default(),
@@ -327,6 +346,29 @@ impl EquationEditor {
         self.caret_blink = on;
     }
 
+    /// Report an arrow key pressed at the start or end of the equation as
+    /// [`EditorResponse::exit`] instead of ignoring it (default off), so a host can move on to the
+    /// text around the equation.
+    pub fn exit_at_edges(mut self, on: bool) -> Self {
+        self.exit_at_edges = on;
+        self
+    }
+
+    /// Text drawn, dimmed, while the equation is blank (default: a hint in the dialog, none inline).
+    pub fn placeholder(mut self, text: &str) -> Self {
+        self.placeholder = Some(text.to_string());
+        self
+    }
+
+    /// Put the caret at the start or end of the equation, as when entering it from the text
+    /// on that side. A pending `\name` is left as typed.
+    pub fn caret_to(&mut self, edge: Edge) {
+        match edge {
+            Edge::Left => self.ed.move_to_start(),
+            Edge::Right => self.ed.move_to_end(),
+        }
+    }
+
     /// Take the keyboard in the first frames after creation (default on).
     pub fn auto_focus(mut self, on: bool) -> Self {
         self.auto_focus = if on { 4 } else { 0 };
@@ -465,13 +507,14 @@ impl EquationEditor {
         let before = self.ed.math().clone();
         let esc = self.focus_within && ui.input(|i| i.key_pressed(Key::Escape));
         let mut committed = false;
+        let mut exit = None;
         let id = self.id;
         let inner = ui.push_id(id, |ui| {
             if self.show_palette && !self.inline {
                 self.palette_ui(ui);
                 ui.add_space(4.0);
             }
-            let canvas = self.canvas_ui(ui, &mut committed);
+            let canvas = self.canvas_ui(ui, &mut committed, &mut exit);
             if !self.inline {
                 ui.add_space(4.0);
                 if self.show_linear {
@@ -490,11 +533,11 @@ impl EquationEditor {
         }
         let (c, l) = (self.canvas_id(), self.linear_id());
         self.focus_within = ui.memory(|m| m.has_focus(c) || m.has_focus(l));
-        EditorResponse { changed: before != *self.ed.math(), committed, cancelled, response: inner.inner, rect: inner.response.rect }
+        EditorResponse { changed: before != *self.ed.math(), committed, cancelled, exit, response: inner.inner, rect: inner.response.rect }
     }
 
     /// Egui input to editor calls. True when the tree or the caret changed.
-    fn handle_input(&mut self, ui: &Ui, committed: &mut bool) -> bool {
+    fn handle_input(&mut self, ui: &Ui, committed: &mut bool, exit: &mut Option<Edge>) -> bool {
         let events = ui.input(|i| i.events.clone());
         if events.is_empty() {
             return false;
@@ -527,6 +570,17 @@ impl EquationEditor {
                         Key::Y if modifiers.command => Some(MKey::Redo),
                         _ => None,
                     };
+                    // An arrow at an end of the top row with nothing selected leaves the equation
+                    // before the editor sees it, so a half-typed `\name` is not flushed.
+                    let leaving = match nav {
+                        Some(MKey::Left) if self.ed.at_start() => Some(Edge::Left),
+                        Some(MKey::Right) if self.ed.at_end() => Some(Edge::Right),
+                        _ => None,
+                    };
+                    if self.exit_at_edges && !modifiers.shift && self.ed.selection().is_none() && leaving.is_some() {
+                        *exit = leaving;
+                        break;
+                    }
                     if let Some(k) = nav {
                         self.ed.key(k, modifiers.shift);
                     } else if *key == Key::A && modifiers.command {
@@ -603,7 +657,7 @@ impl EquationEditor {
     }
 
     /// The editing canvas: the rendered equation, selection, caret, placeholders and mouse.
-    fn canvas_ui(&mut self, ui: &mut Ui, committed: &mut bool) -> egui::Response {
+    fn canvas_ui(&mut self, ui: &mut Ui, committed: &mut bool, exit: &mut Option<Edge>) -> egui::Response {
         let id = self.canvas_id();
         self.manage_focus(ui);
         // Keys the editor uses must not move the focus away; Esc is the editor's too.
@@ -616,6 +670,14 @@ impl EquationEditor {
                 .canvas
                 .as_ref()
                 .map_or((120.0, self.font_size as f32 * 2.0), |c| (c.layout.width() as f32 + 2.0 * VIEW_MARGIN, c.layout.height() as f32));
+            // A blank equation is as wide as its placeholder.
+            let w = match self.placeholder.as_deref() {
+                Some(t) if self.ed.is_blank() => {
+                    let galley = ui.painter().layout_no_wrap(t.to_string(), FontId::proportional(self.font_size as f32 * 0.7), egui::Color32::WHITE);
+                    w.max(galley.size().x + 2.0 * VIEW_MARGIN + 2.0 * EQ_PAD as f32 + 4.0)
+                }
+                _ => w,
+            };
             if self.canvas.is_some() { (w.max(2.0 * VIEW_MARGIN + 8.0), h) } else { (w.max(48.0), h.max(self.font_size as f32 * 1.4)) }
         } else {
             (ui.available_width().max(160.0), self.canvas_height)
@@ -626,7 +688,7 @@ impl EquationEditor {
         let focused = resp.has_focus();
         let now = ui.input(|i| i.time);
 
-        if focused && self.handle_input(ui, committed) {
+        if focused && self.handle_input(ui, committed, exit) {
             self.touched = now;
         }
         self.refresh_canvas(ui);
@@ -706,14 +768,17 @@ impl EquationEditor {
             painter.image(cv.tex.id(), egui::Rect::from_min_size(origin, size), egui::Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), ink);
         }
         let dim = v.weak_text_color();
-        if self.ed.is_blank() && !self.inline {
-            painter.text(
-                pos2(rect.min.x + 14.0, rect.center().y),
-                egui::Align2::LEFT_CENTER,
-                "Type here: x^2, a/b, \\frac, \\sqrt, \\alpha",
-                FontId::proportional(13.0),
-                dim,
-            );
+        if self.ed.is_blank() {
+            if self.inline {
+                if let Some(t) = &self.placeholder {
+                    // Clear of the caret, which sits at the start of the empty place.
+                    let at = pos2(origin.x + EQ_PAD as f32 * k + 6.0, rect.center().y);
+                    painter.text(at, egui::Align2::LEFT_CENTER, t, FontId::proportional(self.font_size as f32 * 0.7), dim);
+                }
+            } else {
+                let hint = self.placeholder.as_deref().unwrap_or("Type here: x^2, a/b, \\frac, \\sqrt, \\alpha");
+                painter.text(pos2(rect.min.x + 14.0, rect.center().y), egui::Align2::LEFT_CENTER, hint, FontId::proportional(13.0), dim);
+            }
         }
         // The caret: solid while editing, blinking when idle.
         if focused {

@@ -578,6 +578,19 @@ impl Editor {
         self.caret.path.is_empty() && self.caret.pos >= units(&self.math.body)
     }
 
+    /// Put the caret at the start of the top row, dropping any selection. A pending `\name` is
+    /// left as typed.
+    pub fn move_to_start(&mut self) {
+        self.set_caret(Caret::default());
+    }
+
+    /// Put the caret at the end of the top row, dropping any selection. A pending `\name` is
+    /// left as typed.
+    pub fn move_to_end(&mut self) {
+        let pos = units(&self.math.body);
+        self.set_caret(Caret { path: vec![], pos });
+    }
+
     /// True when nothing has been typed.
     pub fn is_blank(&self) -> bool {
         units(&self.math.body) == 0
