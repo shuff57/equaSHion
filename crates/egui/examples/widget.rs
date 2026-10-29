@@ -40,15 +40,13 @@ impl eframe::App for Demo {
         if let Some(path) = &self.screenshot {
             self.frames += 1;
             if self.frames == 5 {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
-            }
-            let shot = ui
-                .ctx()
-                .input(|i| i.events.iter().find_map(|e| if let egui::Event::Screenshot { image, .. } = e { Some(image.clone()) } else { None }));
-            if let Some(img) = shot {
-                let ok = write_ppm(path, &img);
-                eprintln!("widget: screenshot {} -> {}", if ok { "saved" } else { "FAILED" }, path.display());
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                let path = path.clone();
+                let ctx = ui.ctx().clone();
+                ui.ctx().request_screenshot(move |img| {
+                    let ok = write_ppm(&path, &img);
+                    eprintln!("widget: screenshot {} -> {}", if ok { "saved" } else { "FAILED" }, path.display());
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                });
             }
             ui.ctx().request_repaint();
         }

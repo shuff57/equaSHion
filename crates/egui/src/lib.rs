@@ -684,7 +684,7 @@ impl EquationEditor {
         };
         let (rect, _) = ui.allocate_exact_size(vec2(width, height), Sense::hover());
         let resp = ui.interact(rect, id, Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::Text);
-        resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, ui.is_enabled(), "Equation"));
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Unknown, ui.is_enabled(), "Equation"));
         let focused = resp.has_focus();
         let now = ui.input(|i| i.time);
 

@@ -901,7 +901,7 @@ fn segment(ui: &mut Ui, p: &Palette, selected: bool, text: &str, hint: &str, com
     // Compact segments (a phone-width header, which also holds the GitHub link) pad less.
     let size = vec2(galley.size().x + 2.0 * if compact { S8 } else { S12 }, 32.0);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, text));
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Tab, true, selected, text));
     if ui.is_rect_visible(rect) {
         let pressed = resp.is_pointer_button_down_on();
         let (fill, fg) = if selected {

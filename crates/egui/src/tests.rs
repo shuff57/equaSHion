@@ -38,7 +38,8 @@ fn harness(app: App) -> Harness<'static, App> {
                 ui.ctx().request_discard("test: a second pass");
             }
             if let Some(t) = a.host_text.as_mut() {
-                ui.add(egui::TextEdit::singleline(t).id(egui::Id::new("host-field")));
+                let field = ui.add(egui::TextEdit::singleline(t).id(egui::Id::new("host-field")));
+                field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextInput, true, "Host field"));
             }
             let r = a.ed.show(ui);
             a.committed += u32::from(r.committed);

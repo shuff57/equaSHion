@@ -31,6 +31,8 @@ fn harness(register: bool, dark: bool) -> Harness<'static, Host> {
         |ui, h: &mut Host| {
             h.frames += 1;
             if h.frames == 1 {
+                // egui_kittest 0.37 panics on a glyph the host's fonts lack; a real app draws tofu.
+                ui.ctx().set_missing_glyph_policy(egui::MissingGlyphPolicy::Tofu);
                 ui.ctx().set_theme(if h.dark { egui::Theme::Dark } else { egui::Theme::Light });
                 if h.register {
                     let mut defs = egui::FontDefinitions::default();
@@ -107,7 +109,7 @@ fn works_on_a_context_where_the_host_registered_a_named_family() {
 /// The control: what the test above guards against does panic. A widget that asks for a named
 /// family the host never registered (as WordCraft's `theme::semibold` did) takes the app down.
 #[test]
-#[should_panic(expected = "not bound")]
+#[should_panic(expected = "Installed fonts: []")]
 fn a_named_family_the_host_never_registered_panics() {
     let mut h = Harness::builder().with_size(vec2(400.0, 200.0)).build_ui(|ui| {
         ui.label(egui::RichText::new("Fractions").font(FontId::new(11.0, FontFamily::Name(SEMIBOLD.into()))));

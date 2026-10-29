@@ -355,7 +355,7 @@ fn tab_bar(ui: &mut Ui, p: &crate::theme::Palette, titles: &[&'static str], sele
             let font = egui::FontId::proportional(crate::theme::T_BODY);
             let galley = ui.painter().layout_no_wrap((*title).to_string(), font, p.muted);
             let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 20.0, 32.0), Sense::click());
-            resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, *title));
+            resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Tab, true, on, *title));
             if ui.is_rect_visible(rect) {
                 let painter = ui.painter();
                 if resp.hovered() && !on {
@@ -391,7 +391,7 @@ pub fn disclosure(ui: &mut Ui, p: &crate::theme::Palette, label: &str, open: boo
     let galley = ui.painter().layout_no_wrap(label.to_string(), font, p.accent);
     let size = vec2(galley.size().x + 22.0, 28.0);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::CollapsingHeader, true, label));
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DisclosureTriangle, true, label));
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         let c = pos2(rect.min.x + 7.0, rect.center().y);
