@@ -27,6 +27,10 @@ pub const TAGLINE: &str = "A pure-Rust equation editor";
 pub const CREDIT: &str = "Typing behaviour is modelled on MathLive. Independent Rust implementation, not affiliated.";
 pub const MATHLIVE_URL: &str = "https://cortexjs.io/mathlive";
 
+/// The contact page (`contact/`, copied next to the app by trunk): the shared Left Hand Dev form,
+/// linked from the footer. Relative, so a preview deployment opens its own copy.
+pub const CONTACT_URL: &str = "contact/";
+
 /// The examples under "Try it": (corpus id, plain name).
 pub const EXAMPLES: &[(&str, &str)] = &[
     ("quadratic", "Quadratic formula"),
@@ -757,9 +761,18 @@ impl Showcase {
             ui.label(small(after));
         });
         ui.add_space(S4);
-        if ui.link(RichText::new("About and licences").size(T_CAPTION + 1.0).color(p.accent)).clicked() {
-            toggle = true;
-        }
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = vec2(0.0, S4);
+            if ui.link(RichText::new("About and licences").size(T_CAPTION + 1.0).color(p.accent)).clicked() {
+                toggle = true;
+            }
+            ui.label(RichText::new("  \u{b7}  ").size(T_CAPTION + 1.0).color(p.muted));
+            ui.add(
+                egui::Hyperlink::from_label_and_url(RichText::new("Contact").size(T_CAPTION + 1.0).color(p.accent), CONTACT_URL)
+                    .open_in_new_tab(true),
+            )
+            .on_hover_text("Send us a message");
+        });
         if toggle {
             self.about_open = !self.about_open;
         }

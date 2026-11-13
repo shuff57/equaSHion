@@ -6,7 +6,7 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use equashion_math::{Editor, Key as MKey, Math, to_latex};
 use equashion_web::export::Data;
-use equashion_web::{COPY_GUIDE, CREDIT, CopyKind, EXAMPLES, HOW_TO_TYPE, Outcome, PASTE_LABEL, Showcase, ThemePref, corpus};
+use equashion_web::{CONTACT_URL, COPY_GUIDE, CREDIT, CopyKind, EXAMPLES, HOW_TO_TYPE, Outcome, PASTE_LABEL, Showcase, ThemePref, corpus};
 
 fn harness_at(w: f32) -> Harness<'static, Showcase> {
     // The header wordmark plays for 4.4 s and asks for a frame every 16 ms while it does, which
@@ -410,11 +410,39 @@ fn the_footer_credits_mathlive_and_opens_about() {
         assert!(!CREDIT.to_lowercase().contains(word), "{word}");
     }
     assert!(h.query_by_label("Known limits").is_none());
+    // Support is the contact form, never a mailto: link.
+    assert_eq!(CONTACT_URL, "contact/");
+    h.get_by_label("Contact").click();
+    h.step();
+    let opened: Vec<(String, bool)> = h
+        .output()
+        .platform_output
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            egui::OutputCommand::OpenUrl(u) => Some((u.url.clone(), u.new_tab)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(opened, [("contact/".to_string(), true)], "Contact opens the contact page in a new tab");
+    h.run();
     h.get_by_label("About and licences").click();
     h.run();
     assert!(h.state().about_open());
     for s in ["What it is", "Credits", "Licence", "Known limits", "MIT OR Apache-2.0, at your option."] {
         h.get_by_label(s);
+    }
+}
+
+#[test]
+fn the_contact_page_embeds_the_shared_form_and_ships_with_the_app() {
+    let page = include_str!("../contact/index.html");
+    assert!(page.contains(r#"<div data-lhd-contact data-site="equashion"></div>"#));
+    assert!(page.contains(r#"<script src="https://contact.lefthanddev.com/embed.js" defer></script>"#));
+    let index = include_str!("../index.html");
+    assert!(index.contains(r#"rel="copy-dir" href="contact" data-target-path="contact""#));
+    for f in [page, index, include_str!("../contact/style.css")] {
+        assert!(!f.contains("mailto:"), "support goes through the contact form");
     }
 }
 

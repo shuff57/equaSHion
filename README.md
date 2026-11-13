@@ -55,8 +55,11 @@ canvas. Every palette face is rendered by equashion-render, not by egui's fonts.
 - **Paste LaTeX, MathML or OMML** (a disclosure): a field and a Load button that replaces the equation.
 - **Try it**: ten examples from `corpus/equations.tsv`, and **How to type**, a short cheat sheet
   (each line is checked against the editor in `apps/equashion-web/tests/showcase.rs`).
-- **Footer**: the MathLive credit and **About and licences**, which opens a panel with what it
-  is, credits, the licence and known limits.
+- **Footer**: the MathLive credit, **About and licences**, which opens a panel with what it
+  is, credits, the licence and known limits, and **Contact**, which opens `contact/` in a new tab:
+  a static page (`apps/equashion-web/contact/`, copied into `dist/` by trunk) holding the shared
+  Left Hand Dev contact form (`contact.lefthanddev.com/embed.js`, site key `equashion`). Support
+  is that form, never a `mailto:` link.
 - **Report a Bug button**, bottom right like raSHio's: the accent button opens the "Report an
   issue" panel, the small one above it opens the list of what was reported. In the panel pick Bug
   (doesn't work), Quirk (works, but picky) or Improve (wish it had), add a title (100 characters)
